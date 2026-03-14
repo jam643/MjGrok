@@ -29,20 +29,22 @@ class ParamPanel:
             self._build_param(spec)
 
     def _build_param(self, spec: ParamSpec) -> None:
-        # ── Label row: [sweep checkbox?] label text (hover for tooltip) ──────
-        with dpg.group(horizontal=True, parent=self._parent):
-            if spec.sweepable:
-                dpg.add_checkbox(
-                    tag=f"sweep_{spec.name}",
-                    label=f"##sweep_{spec.name}",
-                    default_value=False,
-                    callback=self._on_sweep_toggle,
-                    user_data=spec.name,
-                )
-            lbl_id = dpg.add_text(spec.label)
-            if spec.tooltip:
-                with dpg.tooltip(parent=lbl_id):
-                    dpg.add_text(spec.tooltip)
+        # ── Parameter label (full width, tooltip on hover) ────────────────────
+        lbl_id = dpg.add_text(spec.label, parent=self._parent)
+        if spec.tooltip:
+            with dpg.tooltip(parent=lbl_id):
+                dpg.add_text(spec.tooltip)
+
+        # ── Sweep checkbox (sweepable params only) ────────────────────────────
+        if spec.sweepable:
+            dpg.add_checkbox(
+                tag=f"sweep_{spec.name}",
+                label="Sweep",
+                default_value=False,
+                callback=self._on_sweep_toggle,
+                user_data=spec.name,
+                parent=self._parent,
+            )
 
         # ── Input widget (slider or combo) ────────────────────────────────────
         tag = f"param_{spec.name}"
