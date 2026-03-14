@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-import time
 
 import dearpygui.dearpygui as dpg
 
@@ -14,7 +13,7 @@ from mjgrok.scenarios import SCENARIOS
 from mjgrok.scenarios.base import Scenario
 from mjgrok.simulation.runner import SimulationRunner
 from mjgrok.simulation.trajectory import TrajectoryCache
-from mjgrok.viewer.playback import ViewerController
+from mjgrok.viewer.playback import RENDER_H, RENDER_W, ViewerController, create_viewer_texture
 
 
 class MjGrokApp:
@@ -36,9 +35,6 @@ class MjGrokApp:
         dpg.create_context()
         dpg.create_viewport(title="MjGrok — MuJoCo Physics Sandbox", width=1200, height=900)
 
-        # Brief pause before any viewer operations (GLFW safeguard)
-        time.sleep(0.5)
-
         self._build_ui()
 
         dpg.setup_dearpygui()
@@ -46,11 +42,25 @@ class MjGrokApp:
         dpg.start_dearpygui()
         dpg.destroy_context()
 
-        # Clean up on exit
         self._runner.cancel()
         self._viewer_ctrl.close()
 
     def _build_ui(self) -> None:
+        # Register viewer texture before any windows (must happen before show_viewport)
+        create_viewer_texture()
+
+        # Floating viewer window (hidden until user loads it)
+        with dpg.window(
+            tag="viewer_window",
+            label="MuJoCo Viewer",
+            show=False,
+            width=RENDER_W + 20,
+            height=RENDER_H + 40,
+            pos=[330, 30],
+            no_scrollbar=True,
+        ):
+            dpg.add_image("viewer_texture", width=RENDER_W, height=RENDER_H)
+
         with dpg.window(tag="main_window", label="MjGrok", no_title_bar=True):
             dpg.set_primary_window("main_window", True)
 
@@ -79,11 +89,7 @@ class MjGrokApp:
                         callback=self._on_run_clicked,
                         width=-1,
                     )
-                    dpg.add_progress_bar(
-                        tag="progress_bar",
-                        default_value=0.0,
-                        width=-1,
-                    )
+                    dpg.add_progress_bar(tag="progress_bar", default_value=0.0, width=-1)
                     dpg.add_text("Ready", tag="status_text")
 
                 # Right column: plots + playback
@@ -94,7 +100,6 @@ class MjGrokApp:
                     with dpg.child_window(tag="playback_container", height=-1, border=False):
                         pass
 
-        # Build sub-panels after windows exist
         self._param_panel = ParamPanel("param_container")
         self._param_panel.build(self._scenario)
 
@@ -112,15 +117,13 @@ class MjGrokApp:
         )
         self._playback_panel.build()
 
-        # Set initial description
         dpg.set_value("scenario_desc", self._scenario.description)
 
     # ── Scenario selection ──────────────────────────────────────────────────
 
     def _on_scenario_changed(self, sender, app_data, user_data) -> None:
-        name = app_data
         for s in SCENARIOS:
-            if s.name == name:
+            if s.name == app_data:
                 self._scenario = s
                 break
         dpg.set_value("scenario_desc", self._scenario.description)
@@ -178,11 +181,20 @@ class MjGrokApp:
         if self._cache is None:
             dpg.set_value("status_text", "Run a simulation first")
             return
+
+        # Show the floating viewer window (main thread — safe)
+        dpg.show_item("viewer_window")
+        dpg.set_value("status_text", "Loading viewer...")
+
         cache = self._cache
         scenario = self._scenario
         params = self._param_panel.collect_params()
 
-        def _launch() -> None:
-            self._viewer_ctrl.load(scenario, params, cache)
+        def _load() -> None:
+            try:
+                self._viewer_ctrl.load(scenario, params, cache)
+                dpg.set_value("status_text", "Viewer ready")
+            except Exception as e:
+                dpg.set_value("status_text", f"Viewer error: {e}")
 
-        threading.Thread(target=_launch, daemon=True).start()
+        threading.Thread(target=_load, daemon=True).start()

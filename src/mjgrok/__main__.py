@@ -1,4 +1,4 @@
-"""Entry point: uv run mjpython -m mjgrok"""
+"""Entry point: uv run python -m mjgrok"""
 
 from mjgrok.gui.app import MjGrokApp
 

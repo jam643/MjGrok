@@ -7,10 +7,12 @@ Interactive sandbox for developing deep intuition for MuJoCo's physics solver. U
 ## Launch Command
 
 ```bash
-uv run mjpython -m mjgrok
+uv run python -m mjgrok
 ```
 
-**CRITICAL**: Always use `mjpython` (not plain `python`). On macOS, `mujoco.viewer.launch_passive` requires `mjpython` to dispatch OpenGL renders to the main thread. Without it, the viewer silently fails or crashes.
+**Do NOT use `mjpython`**. DearPyGUI requires the macOS main thread to create its `NSWindow` via GLFW. `mjpython` reserves that thread for OpenGL dispatch, causing an `NSInternalInconsistencyException` crash on `show_viewport()`.
+
+Instead, the viewer uses `mujoco.Renderer` for offscreen rendering — frames are displayed as a DPG texture in a floating window inside the GUI. No separate MuJoCo viewer window, no main-thread conflict.
 
 ## Architecture Overview
 
@@ -57,9 +59,9 @@ for i in range(data.ncon):
     ft += np.linalg.norm(force_buf[1:3])  # tangential
 ```
 
-## GLFW Double-Init Safeguard
-
-Both DearPyGUI and MuJoCo use GLFW. Always call `dpg.create_context()` + `dpg.create_viewport()` before spawning any viewer thread. A `time.sleep(0.5)` after viewport creation before first viewer launch is a pragmatic safeguard.
+**Viewer rendering**: `mujoco.Renderer` (offscreen) → numpy RGBA → `dpg.set_value(TEX_TAG, ...)`.
+The floating viewer window and texture are created on the main thread during `_build_ui()`.
+`ViewerController.load()` and frame rendering run on a daemon thread.
 
 ## Adding New Scenarios
 
