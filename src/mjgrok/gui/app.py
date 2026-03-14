@@ -33,7 +33,7 @@ class MjGrokApp:
 
     def run(self) -> None:
         dpg.create_context()
-        dpg.create_viewport(title="MjGrok — MuJoCo Physics Sandbox", width=1200, height=900)
+        dpg.create_viewport(title="MjGrok — MuJoCo Physics Sandbox", width=1440, height=900)
 
         self._build_ui()
 
@@ -66,7 +66,7 @@ class MjGrokApp:
 
             with dpg.group(horizontal=True):
                 # Left column: scenario picker + params + run controls
-                with dpg.child_window(tag="left_panel", width=320, height=-1):
+                with dpg.child_window(tag="left_panel", width=640, height=-1):
                     dpg.add_text("Scenario")
                     dpg.add_combo(
                         tag="scenario_picker",
@@ -75,11 +75,11 @@ class MjGrokApp:
                         callback=self._on_scenario_changed,
                         width=-1,
                     )
-                    dpg.add_text("", tag="scenario_desc")
+                    dpg.add_text("", tag="scenario_desc", wrap=0)
                     dpg.add_separator()
 
                     dpg.add_text("Parameters")
-                    with dpg.child_window(tag="param_container", height=420, border=False):
+                    with dpg.child_window(tag="param_container", height=560, border=False):
                         pass
 
                     dpg.add_separator()
