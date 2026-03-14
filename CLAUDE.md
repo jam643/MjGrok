@@ -1,71 +1,97 @@
 # MjGrok — MuJoCo Interactive Physics Learning Tool
 
-## Purpose
+## Goal
 
-Interactive sandbox for developing deep intuition for MuJoCo's physics solver. Users select canonical physics scenarios, tune/sweep solver parameters, run simulations, and visualize results via DearPyGUI plots + MuJoCo viewer with playback controls.
+An interactive sandbox for building deep intuition for MuJoCo's physics solver and its parameters (constraints, contacts, friction, penetration, solver impedance, etc.).
 
-## Launch Command
+The application hosts a collection of simple **canonical scenarios** — each designed to excite a specific set of MuJoCo solver behaviors (e.g. sliding friction, actuated pendulum, elastic collision). A GUI lets the user:
+
+1. Select a scenario
+2. Tune or sweep over the relevant MuJoCo parameters for that scenario
+3. Run the simulation to generate trajectories
+4. Visualize results via scenario-specific plots and an interactive viewer with scrub/play/pause controls
+
+Multiple trajectories from a parameter sweep are overlaid in plots, and a dropdown selects which trajectory to view in the playback viewer.
+
+## Tech Stack
+
+- **GUI + plots**: DearPyGUI — immediate-mode, GPU-accelerated, built-in plotting, no browser overhead, thread-safe `set_value()` from background threads
+- **Simulation**: MuJoCo CPU (default), macOS
+- **Viewer**: `mujoco.Renderer` (offscreen) → DPG texture displayed in a floating window inside the GUI
+- **Package management**: `uv` | **Linting/formatting**: `ruff`
+
+## macOS Main-Thread Constraint
+
+**Launch with plain Python — do NOT use `mjpython`:**
 
 ```bash
 uv run python -m mjgrok
 ```
 
-**Do NOT use `mjpython`**. DearPyGUI requires the macOS main thread to create its `NSWindow` via GLFW. `mjpython` reserves that thread for OpenGL dispatch, causing an `NSInternalInconsistencyException` crash on `show_viewport()`.
-
-Instead, the viewer uses `mujoco.Renderer` for offscreen rendering — frames are displayed as a DPG texture in a floating window inside the GUI. No separate MuJoCo viewer window, no main-thread conflict.
+DearPyGUI's `show_viewport()` creates an `NSWindow`, which macOS requires on the main thread. `mjpython` reserves that thread for its own OpenGL dispatch, causing an `NSInternalInconsistencyException` crash. The viewer instead uses `mujoco.Renderer` for offscreen rendering — no GLFW conflict, no separate viewer window process needed.
 
 ## Architecture Overview
 
-- `scenarios/base.py` — `ParamSpec`, `PlotSpec`, `Scenario` ABC: foundation for all scenarios
-- `scenarios/sliding_box.py` — MVP scenario: box sliding on floor under friction + external force
-- `simulation/runner.py` — Background simulation thread with cancel support
-- `simulation/trajectory.py` — `TrajectoryCache`: stores time-series data per run
-- `viewer/playback.py` — `ViewerController`: launch/seek/play/pause MuJoCo viewer
-- `gui/app.py` — DearPyGUI main loop and integration hub
-- `gui/param_panel.py` — Auto-generated parameter widgets from `ParamSpec`
-- `gui/plot_panel.py` — Pre-created plots updated via `dpg.set_value()` (thread-safe)
-- `gui/playback_panel.py` — Scrub slider + play/pause/step/viewer controls
+```
+src/mjgrok/
+├── scenarios/
+│   ├── base.py          # Scenario ABC, ParamSpec, PlotSpec
+│   └── sliding_box.py   # MVP scenario
+├── simulation/
+│   ├── runner.py        # SimulationRunner: background thread, cancel support
+│   └── trajectory.py    # TrajectoryCache: stores time-series per run
+├── viewer/
+│   └── playback.py      # ViewerController: offscreen render → DPG texture
+└── gui/
+    ├── app.py           # DearPyGUI main loop, integration hub
+    ├── param_panel.py   # Auto-generated widgets from ParamSpec (+ sweep UI)
+    ├── plot_panel.py    # Pre-created plots, updated via dpg.set_value()
+    └── playback_panel.py # Scrub slider, play/pause/step, viewer controls
+```
 
 ## Threading Model
 
 ```
-Main Thread (mjpython)
-  └─ dpg.start_dearpygui()  ←→  GUI callbacks
+Main Thread
+  └─ dpg.start_dearpygui()  ←→  GUI callbacks (on_run, on_seek, on_play)
 
 SimulationRunner Thread (daemon)
-  └─ mj_step() loop → TrajectoryCache
-     on_done → dpg.set_value() [thread-safe]
+  └─ mj_step() loop → TrajectoryCache.append()
+     on_done/on_progress → dpg.set_value() [thread-safe]
+     Checks cancel_event every step
 
 ViewerController Thread (daemon, spawned on-demand)
-  └─ launch_passive() → handle
-     seek/play: acquire handle.lock() → set qpos/qvel → mj_forward → sync()
+  └─ mujoco.Renderer → render frame → dpg.set_value(TEX_TAG, pixels)
+     play(): loop rendering frames with frame-rate cap (~60 fps)
 ```
 
-**Thread safety rule**: Only call `dpg.set_value()` from background threads — never create new DPG items from outside the main thread.
+**Thread safety rule**: Only call `dpg.set_value()` from background threads — never create new DPG items outside the main thread.
 
-## Key MuJoCo Patterns
+## Scenario Interface
 
-**External force injection** (NOT via actuators):
+Each scenario implements:
+
 ```python
-data.xfrc_applied[box_body_id][0] = params["force_x"]  # each step before mj_step
+class Scenario(ABC):
+    name: str
+    description: str
+
+    def param_specs(self) -> list[ParamSpec]: ...   # drives param panel widgets
+    def plot_specs(self) -> list[PlotSpec]: ...      # drives plot panel layout
+    def build_model(self, params) -> mujoco.MjModel: ...
+    def extract_series(self, model, data, t) -> dict[str, float]: ...
 ```
 
-**Contact force extraction** (NOT raw `contact.pos`):
-```python
-force_buf = np.zeros(6)
-for i in range(data.ncon):
-    mujoco.mj_contactForce(model, data, i, force_buf)
-    fn += abs(force_buf[0])           # normal
-    ft += np.linalg.norm(force_buf[1:3])  # tangential
-```
+`ParamSpec` includes `dtype` (float/int/enum), default, min/max, `sweepable` flag, and tooltip. The GUI auto-generates all parameter widgets and plots from these specs — no GUI code changes needed when adding a new scenario.
 
-**Viewer rendering**: `mujoco.Renderer` (offscreen) → numpy RGBA → `dpg.set_value(TEX_TAG, ...)`.
-The floating viewer window and texture are created on the main thread during `_build_ui()`.
-`ViewerController.load()` and frame rendering run on a daemon thread.
+## Sweep Architecture
+
+Sweepable params show a checkbox in the param panel. When checked, the slider is replaced by Min / Max / N inputs. `ParamPanel.get_sweep_configs()` returns the configured ranges. The runner will execute N sequential simulations and the plot panel will overlay all resulting trajectories. A dropdown in the playback panel selects which sweep trajectory to view.
 
 ## Adding New Scenarios
 
 1. Subclass `Scenario` in `scenarios/`
 2. Implement `param_specs()`, `plot_specs()`, `build_model()`, `extract_series()`
 3. Register in `scenarios/__init__.py`
-4. The GUI auto-generates parameter widgets and plots from the specs — no GUI code changes needed.
+
+The GUI adapts automatically — no other changes needed.
