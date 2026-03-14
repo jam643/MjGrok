@@ -1,0 +1,29 @@
+[project]
+name = "mjgrok"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Jesse Miller", email = "jessemiller@Jesses-MacBook-Pro.local" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "dearpygui>=2.2",
+    "mujoco>=3.6.0",
+    "numpy>=2.2.6",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.6",
+]
