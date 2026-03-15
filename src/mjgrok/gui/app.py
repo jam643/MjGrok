@@ -11,6 +11,7 @@ import dearpygui.dearpygui as dpg
 from mjgrok.gui.param_panel import ParamPanel
 from mjgrok.gui.playback_panel import PlaybackPanel
 from mjgrok.gui.plot_panel import PlotPanel
+from mjgrok.gui.saveload_panel import SaveLoadPanel
 from mjgrok.scenarios import SCENARIOS
 from mjgrok.scenarios.base import Scenario
 from mjgrok.simulation.runner import SimulationRunner
@@ -34,6 +35,7 @@ class MjGrokApp:
         self._param_panel: ParamPanel | None = None
         self._plot_panel: PlotPanel | None = None
         self._playback_panel: PlaybackPanel | None = None
+        self._saveload_panel: SaveLoadPanel | None = None
 
     def run(self) -> None:
         dpg.create_context()
@@ -97,6 +99,13 @@ class MjGrokApp:
                     dpg.add_separator()
                     dpg.add_spacer(height=6)
 
+                    with dpg.child_window(tag="saveload_container", height=90, border=False):
+                        pass
+
+                    dpg.add_spacer(height=6)
+                    dpg.add_separator()
+                    dpg.add_spacer(height=6)
+
                     dpg.add_button(
                         label="Run Simulation",
                         tag="run_btn",
@@ -121,6 +130,10 @@ class MjGrokApp:
 
         self._param_panel = ParamPanel("param_container", on_change=self._on_param_changed)
         self._param_panel.build(self._scenario)
+
+        self._saveload_panel = SaveLoadPanel("saveload_container", on_load=self._on_preset_loaded)
+        self._saveload_panel.set_params_getter(lambda: self._param_panel.collect_params())
+        self._saveload_panel.build(self._scenario.name)
 
         self._plot_panel = PlotPanel("plot_container")
         self._plot_panel.build(self._scenario)
@@ -153,9 +166,13 @@ class MjGrokApp:
         dpg.set_value("scenario_desc", self._scenario.description)
         self._param_panel.build(self._scenario)
         self._plot_panel.build(self._scenario)
+        self._saveload_panel.refresh(self._scenario.name)
         self._caches = {}
 
     # ── Simulation ──────────────────────────────────────────────────────────
+
+    def _on_preset_loaded(self, params: dict) -> None:
+        self._param_panel.apply_params(params)
 
     def _on_reset_clicked(self, sender=None, app_data=None, user_data=None) -> None:
         if self._param_panel:

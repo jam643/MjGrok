@@ -212,6 +212,25 @@ class ParamPanel:
         if self._on_change:
             self._on_change(None, None, None)
 
+    def apply_params(self, params: dict[str, Any]) -> None:
+        """Set widget values from a params dict (e.g. loaded from a preset)."""
+        for spec in self._specs:
+            if spec.name not in params:
+                continue
+            val = params[spec.name]
+            if spec.dtype == "float":
+                dpg.set_value(f"param_{spec.name}", float(val))
+                if dpg.does_item_exist(f"param_input_{spec.name}"):
+                    dpg.set_value(f"param_input_{spec.name}", float(val))
+            elif spec.dtype == "int":
+                dpg.set_value(f"param_{spec.name}", int(val))
+                if dpg.does_item_exist(f"param_input_{spec.name}"):
+                    dpg.set_value(f"param_input_{spec.name}", int(val))
+            else:
+                dpg.set_value(f"param_{spec.name}", str(val))
+        if self._on_change:
+            self._on_change(None, None, None)
+
     def collect_params(self) -> dict[str, Any]:
         """Return single-value params, reading from whichever widget is active."""
         params: dict[str, Any] = {}
