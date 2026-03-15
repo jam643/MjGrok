@@ -46,6 +46,7 @@ class MjGrokApp:
 
         dpg.setup_dearpygui()
         dpg.show_viewport()
+        self._on_run_clicked()
         dpg.start_dearpygui()
         dpg.destroy_context()
 
@@ -115,7 +116,7 @@ class MjGrokApp:
                     dpg.add_checkbox(
                         tag="auto_run",
                         label="Auto-run on change",
-                        default_value=False,
+                        default_value=True,
                     )
                     dpg.add_progress_bar(tag="progress_bar", default_value=0.0, width=-1)
                     dpg.add_text("Ready", tag="status_text")
@@ -227,7 +228,8 @@ class MjGrokApp:
             label_parts = []
             for name, val in combo:
                 params[name] = val
-                label_parts.append(f"{name}={val:.3g}" if isinstance(val, float) else f"{name}={val}")
+                fmt = f"{name}={val:.3g}" if isinstance(val, float) else f"{name}={val}"
+                label_parts.append(fmt)
             runs.append((", ".join(label_parts), params))
         return runs
 
@@ -244,7 +246,10 @@ class MjGrokApp:
         n_done = len(self._caches)
         n_total = len(self._plot_panel._traj_labels)
         if n_done == n_total:
-            dpg.set_value("status_text", f"Done — {n_done} trajectory/ies, {cache.frame_count()} frames each")
+            dpg.set_value(
+                "status_text",
+                f"Done — {n_done} trajectory/ies, {cache.frame_count()} frames each",
+            )
             dpg.set_value("progress_bar", 1.0)
         else:
             dpg.set_value("status_text", f"Running — {n_done}/{n_total} trajectories done")
