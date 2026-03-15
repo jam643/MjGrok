@@ -11,6 +11,7 @@ import numpy as np
 @dataclass
 class TrajectoryCache:
     params: dict[str, Any]
+    label: str = ""
     times: list[float] = field(default_factory=list)
     series: dict[str, list[float]] = field(default_factory=dict)
 

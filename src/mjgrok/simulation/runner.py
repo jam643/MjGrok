@@ -17,7 +17,7 @@ class SimulationRunner:
         self,
         on_done: Callable[[TrajectoryCache], None],
         on_error: Callable[[Exception], None],
-        on_progress: Callable[[float], None],  # fraction 0.0–1.0
+        on_progress: Callable[[float], None],  # fraction 0.0–1.0 across whole batch
     ) -> None:
         self.on_done = on_done
         self.on_error = on_error
@@ -32,16 +32,20 @@ class SimulationRunner:
         params: dict[str, Any],
         duration: float = 5.0,
         dt: float = 0.002,
+        label: str = "",
     ) -> None:
-        """Cancel any in-progress run, then start a new daemon thread."""
-        self.cancel()
-        self._cancel_event = threading.Event()
-        self._thread = threading.Thread(
-            target=self._run_loop,
-            args=(scenario, params, duration, dt),
-            daemon=True,
-        )
-        self._thread.start()
+        """Run a single simulation."""
+        self._start(scenario, [(label, params)], duration, dt)
+
+    def run_batch(
+        self,
+        scenario: Scenario,
+        labeled_params: list[tuple[str, dict[str, Any]]],
+        duration: float = 5.0,
+        dt: float = 0.002,
+    ) -> None:
+        """Run multiple simulations sequentially, calling on_done for each."""
+        self._start(scenario, labeled_params, duration, dt)
 
     def cancel(self) -> None:
         """Signal cancellation and wait up to 2s for thread to exit."""
@@ -50,46 +54,59 @@ class SimulationRunner:
             self._thread.join(timeout=2.0)
         self._thread = None
 
-    def _run_loop(
+    def _start(
         self,
         scenario: Scenario,
-        params: dict[str, Any],
+        labeled_params: list[tuple[str, dict[str, Any]]],
         duration: float,
         dt: float,
     ) -> None:
-        try:
-            model = scenario.build_model(params)
-            data = mujoco.MjData(model)
+        self.cancel()
+        self._cancel_event = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run_loop,
+            args=(scenario, labeled_params, duration, dt),
+            daemon=True,
+        )
+        self._thread.start()
 
-            box_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "box")
-            force_x = float(params.get("force_x", 0.0))
+    def _run_loop(
+        self,
+        scenario: Scenario,
+        labeled_params: list[tuple[str, dict[str, Any]]],
+        duration: float,
+        dt: float,
+    ) -> None:
+        total_runs = len(labeled_params)
+        total_steps = int(duration / dt)
 
-            cache = TrajectoryCache(params=dict(params))
-            total_steps = int(duration / dt)
+        for run_idx, (label, params) in enumerate(labeled_params):
+            if self._cancel_event.is_set():
+                return
+            try:
+                model = scenario.build_model(params)
+                data = mujoco.MjData(model)
+                cache = TrajectoryCache(params=dict(params), label=label)
 
-            for step in range(total_steps):
-                if self._cancel_event.is_set():
-                    return
+                for step in range(total_steps):
+                    if self._cancel_event.is_set():
+                        return
 
-                # Inject external force before each step
-                if box_id >= 0:
-                    data.xfrc_applied[box_id][0] = force_x
+                    scenario.apply_ctrl(model, data, params)
+                    mujoco.mj_step(model, data)
 
-                mujoco.mj_step(model, data)
+                    values = scenario.extract_series(model, data, data.time)
+                    qpos_values = {f"qpos_{i}": float(data.qpos[i]) for i in range(len(data.qpos))}
+                    qvel_values = {f"qvel_{i}": float(data.qvel[i]) for i in range(len(data.qvel))}
+                    cache.append(data.time, {**values, **qpos_values, **qvel_values})
 
-                values = scenario.extract_series(model, data, data.time)
-                # Store qpos/qvel for viewer playback
-                qpos_values = {f"qpos_{i}": float(data.qpos[i]) for i in range(len(data.qpos))}
-                qvel_values = {f"qvel_{i}": float(data.qvel[i]) for i in range(len(data.qvel))}
-                all_values = {**values, **qpos_values, **qvel_values}
+                    if step % 50 == 0:
+                        overall = (run_idx + (step + 1) / total_steps) / total_runs
+                        self.on_progress(overall)
 
-                cache.append(data.time, all_values)
+                cache.finalize()
+                self.on_done(cache)
 
-                if step % 50 == 0:
-                    self.on_progress((step + 1) / total_steps)
-
-            cache.finalize()
-            self.on_done(cache)
-
-        except Exception as e:
-            self.on_error(e)
+            except Exception as e:
+                self.on_error(e)
+                return

@@ -17,6 +17,7 @@ class PlaybackPanel:
         on_step_forward: Callable[[], None],
         on_step_backward: Callable[[], None],
         on_open_viewer: Callable[[], None],
+        on_trajectory_changed: Callable[[str], None] | None = None,
     ) -> None:
         self._parent = parent_tag
         self._on_seek = on_seek
@@ -25,10 +26,22 @@ class PlaybackPanel:
         self._on_step_forward = on_step_forward
         self._on_step_backward = on_step_backward
         self._on_open_viewer = on_open_viewer
+        self._on_trajectory_changed = on_trajectory_changed
 
     def build(self) -> None:
         dpg.add_text("Playback", parent=self._parent)
         dpg.add_separator(parent=self._parent)
+
+        dpg.add_combo(
+            tag="traj_combo",
+            label="Trajectory",
+            items=[],
+            default_value="",
+            parent=self._parent,
+            width=-1,
+            show=False,
+            callback=lambda s, a, u: self._on_trajectory_changed(a) if self._on_trajectory_changed else None,
+        )
 
         dpg.add_slider_int(
             tag="playback_scrub",
@@ -68,8 +81,21 @@ class PlaybackPanel:
                 width=100,
             )
 
+    def set_trajectories(self, labels: list[str]) -> None:
+        """Populate the trajectory dropdown. Must be called from main thread."""
+        if len(labels) > 1:
+            dpg.configure_item("traj_combo", items=labels, default_value=labels[0])
+            dpg.set_value("traj_combo", labels[0])
+            dpg.show_item("traj_combo")
+        else:
+            dpg.hide_item("traj_combo")
+
+    def get_selected_trajectory(self) -> str:
+        """Return the currently selected trajectory label."""
+        return dpg.get_value("traj_combo")
+
     def set_frame_count(self, n: int) -> None:
-        """Update scrub slider max when a new trajectory is loaded."""
+        """Update scrub slider max when a trajectory is selected."""
         if n > 0:
             dpg.configure_item("playback_scrub", max_value=n - 1)
             dpg.set_value("playback_scrub", 0)
