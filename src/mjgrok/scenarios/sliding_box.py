@@ -199,12 +199,11 @@ class SlidingBoxScenario(Scenario):
         # ── Box body ──────────────────────────────────────────────────────────
         box_body = spec.worldbody.add_body()
         box_body.name = "box"
-        box_body.pos = [0.0, 0.0, 0.25]
+        box_body.pos = [0.0, 0.0, 0.26]  # slightly above floor so gravity + contact settle naturally
 
-        slide = box_body.add_joint()
-        slide.name = "slide_x"
-        slide.type = mujoco.mjtJoint.mjJNT_SLIDE
-        slide.axis = [1, 0, 0]
+        free = box_body.add_joint()
+        free.name = "free"
+        free.type = mujoco.mjtJoint.mjJNT_FREE
 
         box_geom = box_body.add_geom()
         box_geom.name = "box_geom"
@@ -216,19 +215,14 @@ class SlidingBoxScenario(Scenario):
         box_geom.solref = solref
         box_geom.rgba = [0.2, 0.6, 0.9, 1.0]
 
-        # ── Motor actuator for external force ─────────────────────────────────
-        act = spec.add_actuator()
-        act.set_to_motor()
-        act.name = "force_x"
-        act.target = "slide_x"
-        act.trntype = mujoco.mjtTrn.mjTRN_JOINT
-
         return spec
 
     def apply_ctrl(
         self, model: mujoco.MjModel, data: mujoco.MjData, params: dict[str, Any]
     ) -> None:
-        data.ctrl[0] = float(params["force_x"])
+        # Apply force directly on the box body in X — no actuator needed with free joint
+        body_id = model.body("box").id
+        data.xfrc_applied[body_id, 0] = float(params["force_x"])
 
     def extract_series(
         self,
@@ -236,6 +230,7 @@ class SlidingBoxScenario(Scenario):
         data: mujoco.MjData,
         t: float,
     ) -> dict[str, float]:
+        # Free joint: qpos = [x, y, z, qw, qx, qy, qz], qvel = [vx, vy, vz, wx, wy, wz]
         pos_x = float(data.qpos[0])
         vel_x = float(data.qvel[0])
 
