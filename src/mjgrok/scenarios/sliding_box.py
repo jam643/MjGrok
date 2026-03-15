@@ -97,6 +97,37 @@ class SlidingBoxScenario(Scenario):
                 group="Friction",
             ),
             ParamSpec(
+                "timestep",
+                "Timestep (s)",
+                "float",
+                0.002,
+                min_val=0.0001,
+                max_val=0.02,
+                step=0.0001,
+                tooltip="Simulation timestep",
+                group="Simulation",
+            ),
+            ParamSpec(
+                "integrator",
+                "Integrator",
+                "enum",
+                "Euler",
+                choices=["Euler", "RK4", "implicit", "implicitfast"],
+                sweepable=False,
+                tooltip="Numerical integrator for the equations of motion",
+                group="Simulation",
+            ),
+            ParamSpec(
+                "solver",
+                "Solver",
+                "enum",
+                "Newton",
+                choices=["PGS", "CG", "Newton"],
+                sweepable=False,
+                tooltip="Constraint solver algorithm",
+                group="Simulation",
+            ),
+            ParamSpec(
                 "cone",
                 "Contact Cone",
                 "enum",
@@ -197,8 +228,21 @@ class SlidingBoxScenario(Scenario):
         spec = mujoco.MjSpec()
 
         # ── Solver options ────────────────────────────────────────────────────
-        spec.option.timestep = 0.002
+        spec.option.timestep = float(params["timestep"])
         spec.option.gravity = [0.0, 0.0, -10.0]
+        _integrator_map = {
+            "Euler": mujoco.mjtIntegrator.mjINT_EULER,
+            "RK4": mujoco.mjtIntegrator.mjINT_RK4,
+            "implicit": mujoco.mjtIntegrator.mjINT_IMPLICIT,
+            "implicitfast": mujoco.mjtIntegrator.mjINT_IMPLICITFAST,
+        }
+        spec.option.integrator = _integrator_map[params["integrator"]]
+        _solver_map = {
+            "PGS": mujoco.mjtSolver.mjSOL_PGS,
+            "CG": mujoco.mjtSolver.mjSOL_CG,
+            "Newton": mujoco.mjtSolver.mjSOL_NEWTON,
+        }
+        spec.option.solver = _solver_map[params["solver"]]
         spec.option.cone = (
             mujoco.mjtCone.mjCONE_ELLIPTIC
             if params["cone"] == "elliptic"

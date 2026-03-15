@@ -43,7 +43,7 @@ class ParamPanel:
         for group_name, specs in groups.items():
             header = dpg.add_collapsing_header(
                 label=group_name,
-                default_open=True,
+                default_open=False,
                 parent=self._parent,
             )
             inner = dpg.add_group(parent=header, indent=8)
