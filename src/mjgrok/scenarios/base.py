@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import mujoco
+
+if TYPE_CHECKING:
+    from mjgrok.simulation.trajectory import TrajectoryCache
 
 
 @dataclass
@@ -76,3 +79,12 @@ class Scenario(ABC):
 
     def default_params(self) -> dict[str, Any]:
         return {spec.name: spec.default for spec in self.param_specs()}
+
+    def analytical_solution(
+        self,
+        params: dict[str, Any],
+        duration: float = 5.0,
+        dt: float = 0.002,
+    ) -> TrajectoryCache | None:
+        """Return an analytically-computed TrajectoryCache, or None if not implemented."""
+        return None

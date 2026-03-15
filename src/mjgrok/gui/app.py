@@ -25,6 +25,8 @@ class MjGrokApp:
     def __init__(self) -> None:
         self._scenario: Scenario = SCENARIOS[0]
         self._caches: dict[str, TrajectoryCache] = {}
+        self._analytical_labels: set[str] = set()
+        self._n_sim_expected: int = 0
         self._viewer = ViewerLauncher()
         self._runner = SimulationRunner(
             on_done=self._on_sim_done,
@@ -107,6 +109,19 @@ class MjGrokApp:
                     dpg.add_separator()
                     dpg.add_spacer(height=6)
 
+                    dpg.add_separator()
+                    dpg.add_spacer(height=4)
+                    dpg.add_text("Analytical Solution", tag="lbl_analytical")
+                    dpg.add_checkbox(
+                        tag="show_analytical",
+                        label="Show analytical solution (Coulomb friction)",
+                        default_value=True,
+                        callback=self._on_param_changed,
+                    )
+                    dpg.add_spacer(height=4)
+                    dpg.add_separator()
+                    dpg.add_spacer(height=4)
+
                     dpg.add_button(
                         label="Run Simulation",
                         tag="run_btn",
@@ -154,8 +169,23 @@ class MjGrokApp:
         dpg.set_value("scenario_desc", self._scenario.description)
 
         if self._font_header is not None:
-            for tag in ("lbl_scenario", "lbl_parameters"):
+            for tag in ("lbl_scenario", "lbl_parameters", "lbl_analytical"):
                 dpg.bind_item_font(tag, self._font_header)
+
+        # Hide analytical section if scenario doesn't support it
+        self._refresh_analytical_visibility()
+
+    def _refresh_analytical_visibility(self) -> None:
+        """Show/hide the analytical solution checkbox based on scenario support."""
+        has_analytical = (
+            self._scenario.analytical_solution(self._scenario.default_params()) is not None
+        )
+        if has_analytical:
+            dpg.show_item("lbl_analytical")
+            dpg.show_item("show_analytical")
+        else:
+            dpg.hide_item("lbl_analytical")
+            dpg.hide_item("show_analytical")
 
     # ── Scenario selection ──────────────────────────────────────────────────
 
@@ -169,6 +199,7 @@ class MjGrokApp:
         self._plot_panel.build(self._scenario)
         self._saveload_panel.refresh(self._scenario.name)
         self._caches = {}
+        self._refresh_analytical_visibility()
 
     # ── Simulation ──────────────────────────────────────────────────────────
 
@@ -188,15 +219,37 @@ class MjGrokApp:
         sweep_configs = self._param_panel.get_sweep_configs()
 
         labeled_params = self._build_labeled_params(base_params, sweep_configs)
-        labels = [lp[0] for lp in labeled_params]
+        sim_labels = [lp[0] for lp in labeled_params]
 
         self._caches = {}
+        self._analytical_labels = set()
+        self._n_sim_expected = len(labeled_params)
+
+        # Compute analytical trajectories (fast, done synchronously on main thread)
+        show_analytical = dpg.get_value("show_analytical")
+        analytical_caches: list[TrajectoryCache] = []
+        if show_analytical:
+            for sim_label, params in labeled_params:
+                a_cache = self._scenario.analytical_solution(params, duration=5.0, dt=0.002)
+                if a_cache is not None:
+                    a_label = f"Analytical ({sim_label})" if sim_label else "Analytical"
+                    a_cache.label = a_label
+                    analytical_caches.append(a_cache)
+                    self._analytical_labels.add(a_label)
+
+        all_labels = sim_labels + [c.label for c in analytical_caches]
+
         dpg.set_value("status_text", "Running...")
         dpg.set_value("progress_bar", 0.0)
 
         # Pre-create series and populate trajectory dropdown from main thread
-        self._plot_panel.prepare_trajectories(labels)
-        self._playback_panel.set_trajectories(labels)
+        self._plot_panel.prepare_trajectories(all_labels)
+        self._playback_panel.set_trajectories(all_labels)
+
+        # Populate analytical trajectories immediately (series already created above)
+        for a_cache in analytical_caches:
+            self._caches[a_cache.label] = a_cache
+            self._plot_panel.update(a_cache)
 
         if len(labeled_params) == 1:
             self._runner.run(
@@ -243,16 +296,19 @@ class MjGrokApp:
         if not selected or selected == cache.label:
             self._playback_panel.set_frame_count(cache.frame_count())
 
-        n_done = len(self._caches)
-        n_total = len(self._plot_panel._traj_labels)
-        if n_done == n_total:
+        # Count only simulation completions (analytical caches are pre-populated)
+        n_sim_done = sum(1 for lbl in self._caches if lbl not in self._analytical_labels)
+        if n_sim_done == self._n_sim_expected:
             dpg.set_value(
                 "status_text",
-                f"Done — {n_done} trajectory/ies, {cache.frame_count()} frames each",
+                f"Done — {self._n_sim_expected} trajectory/ies, {cache.frame_count()} frames each",
             )
             dpg.set_value("progress_bar", 1.0)
         else:
-            dpg.set_value("status_text", f"Running — {n_done}/{n_total} trajectories done")
+            dpg.set_value(
+                "status_text",
+                f"Running — {n_sim_done}/{self._n_sim_expected} sim trajectories done",
+            )
 
     def _on_sim_error(self, exc: Exception) -> None:
         dpg.set_value("status_text", f"Error: {exc}")

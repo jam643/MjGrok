@@ -8,6 +8,7 @@ import mujoco
 import numpy as np
 
 from mjgrok.scenarios.base import ParamSpec, PlotSpec, Scenario
+from mjgrok.simulation.trajectory import TrajectoryCache
 
 
 class SlidingBoxScenario(Scenario):
@@ -298,3 +299,65 @@ class SlidingBoxScenario(Scenario):
             ft += float(np.linalg.norm(force_buf[1:3]))
 
         return {"pos_x": pos_x, "vel_x": vel_x, "fn": fn, "ft": ft}
+
+    def analytical_solution(
+        self,
+        params: dict,
+        duration: float = 5.0,
+        dt: float = 0.002,
+    ) -> TrajectoryCache:
+        """Coulomb friction analytical solution for constant horizontal force from rest.
+
+        Physics (1D, starting from rest at x=0):
+          N   = m * g
+          F_x = force_x_normalized * N
+          F_fric_max = friction_slide * N
+
+          Static case  (|F_x| <= F_fric_max): a = 0, x = 0, v = 0
+          Sliding case (|F_x|  > F_fric_max): a = (F_x - sign(F_x)*F_fric_max) / m
+                                               v(t) = a * t
+                                               x(t) = 0.5 * a * t²
+        """
+        g = 10.0
+        mass = float(params["box_mass"])
+        box_hh = float(params["box_half_height"])
+        mu = float(params["friction_slide"])
+        force_norm = float(params["force_x_normalized"])
+
+        N = mass * g
+        F_x = force_norm * N
+        F_fric_max = mu * N
+
+        if abs(F_x) <= F_fric_max:
+            # Static: box never moves
+            a = 0.0
+            ft_val = abs(F_x)  # static friction matches applied force
+        else:
+            # Sliding: constant kinetic friction opposing motion
+            a = (F_x - np.sign(F_x) * F_fric_max) / mass
+            ft_val = F_fric_max
+
+        n_steps = int(duration / dt)
+        cache = TrajectoryCache(params=dict(params), label="")  # label set by caller
+
+        for step in range(n_steps):
+            t = (step + 1) * dt
+            x = 0.5 * a * t * t
+            v = a * t
+
+            # Free joint layout: qpos=[x,y,z,qw,qx,qy,qz], qvel=[vx,vy,vz,wx,wy,wz]
+            qpos = [x, 0.0, box_hh, 1.0, 0.0, 0.0, 0.0]
+            qvel = [v, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+            values: dict[str, float] = {
+                "pos_x": x,
+                "vel_x": v,
+                "fn": N,
+                "ft": ft_val,
+            }
+            values.update({f"qpos_{i}": qpos[i] for i in range(7)})
+            values.update({f"qvel_{i}": qvel[i] for i in range(6)})
+            cache.append(t, values)
+
+        cache.finalize()
+        return cache
