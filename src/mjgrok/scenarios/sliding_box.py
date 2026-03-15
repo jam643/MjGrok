@@ -13,11 +13,34 @@ from mjgrok.scenarios.base import ParamSpec, PlotSpec, Scenario
 class SlidingBoxScenario(Scenario):
     name = "Sliding Box"
     description = (
-        "Box on a flat floor under constant external force. Explore friction and solver parameters."
+        "Box on a flat floor under constant external force. "
+        "Gravity = 10 m/s². Explore box geometry, mass, friction, and solver parameters."
     )
 
     def param_specs(self) -> list[ParamSpec]:
         return [
+            ParamSpec(
+                "box_size",
+                "Half-size (m)",
+                "float",
+                0.25,
+                min_val=0.05,
+                max_val=1.0,
+                step=0.05,
+                tooltip="Half-extent of the cube (same in all dimensions)",
+                group="Box",
+            ),
+            ParamSpec(
+                "box_mass",
+                "Mass (kg)",
+                "float",
+                1.0,
+                min_val=0.1,
+                max_val=50.0,
+                step=0.1,
+                tooltip="Mass of the box",
+                group="Box",
+            ),
             ParamSpec(
                 "force_x",
                 "Force X (N)",
@@ -164,6 +187,7 @@ class SlidingBoxScenario(Scenario):
 
         # ── Solver options ────────────────────────────────────────────────────
         spec.option.timestep = 0.002
+        spec.option.gravity = [0.0, 0.0, -10.0]
         spec.option.cone = (
             mujoco.mjtCone.mjCONE_ELLIPTIC
             if params["cone"] == "elliptic"
@@ -197,10 +221,10 @@ class SlidingBoxScenario(Scenario):
         floor.rgba = [0.8, 0.8, 0.8, 1.0]
 
         # ── Box body ──────────────────────────────────────────────────────────
+        box_size = float(params["box_size"])
         box_body = spec.worldbody.add_body()
         box_body.name = "box"
-        box_body.pos = [0.0, 0.0, 0.26]  # slightly above floor so gravity + contact settle naturally
-
+        box_body.pos = [0.0, 0.0, box_size]
         free = box_body.add_joint()
         free.name = "free"
         free.type = mujoco.mjtJoint.mjJNT_FREE
@@ -208,8 +232,8 @@ class SlidingBoxScenario(Scenario):
         box_geom = box_body.add_geom()
         box_geom.name = "box_geom"
         box_geom.type = mujoco.mjtGeom.mjGEOM_BOX
-        box_geom.size = [0.25, 0.25, 0.25]
-        box_geom.mass = 1.0
+        box_geom.size = [box_size, box_size, box_size]
+        box_geom.mass = float(params["box_mass"])
         box_geom.friction = friction
         box_geom.solimp = solimp
         box_geom.solref = solref
