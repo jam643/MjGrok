@@ -21,6 +21,7 @@ class ParamSpec:
     choices: list[str] | None = None  # for enum dtype
     sweepable: bool = True
     tooltip: str = ""
+    group: str = ""  # collapsible section label; empty = ungrouped (shown at top)
 
 
 @dataclass
@@ -67,6 +68,11 @@ class Scenario(ABC):
     ) -> dict[str, float]:
         """Called at each sim step. Returns {series_key: scalar_value}."""
         ...
+
+    def apply_ctrl(  # noqa: B027
+        self, model: mujoco.MjModel, data: mujoco.MjData, params: dict[str, Any]
+    ) -> None:
+        """Set data.ctrl each step before mj_step. Default: no-op."""
 
     def default_params(self) -> dict[str, Any]:
         return {spec.name: spec.default for spec in self.param_specs()}
