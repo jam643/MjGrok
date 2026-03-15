@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import threading
-
 import dearpygui.dearpygui as dpg
 
 from mjgrok.gui.param_panel import ParamPanel
@@ -13,14 +11,14 @@ from mjgrok.scenarios import SCENARIOS
 from mjgrok.scenarios.base import Scenario
 from mjgrok.simulation.runner import SimulationRunner
 from mjgrok.simulation.trajectory import TrajectoryCache
-from mjgrok.viewer.playback import RENDER_H, RENDER_W, ViewerController, create_viewer_texture
+from mjgrok.viewer.playback import ViewerLauncher
 
 
 class MjGrokApp:
     def __init__(self) -> None:
         self._scenario: Scenario = SCENARIOS[0]
         self._cache: TrajectoryCache | None = None
-        self._viewer_ctrl = ViewerController()
+        self._viewer = ViewerLauncher()
         self._runner = SimulationRunner(
             on_done=self._on_sim_done,
             on_error=self._on_sim_error,
@@ -43,24 +41,9 @@ class MjGrokApp:
         dpg.destroy_context()
 
         self._runner.cancel()
-        self._viewer_ctrl.close()
+        self._viewer.close()
 
     def _build_ui(self) -> None:
-        # Register viewer texture before any windows (must happen before show_viewport)
-        create_viewer_texture()
-
-        # Floating viewer window (hidden until user loads it)
-        with dpg.window(
-            tag="viewer_window",
-            label="MuJoCo Viewer",
-            show=False,
-            width=RENDER_W + 20,
-            height=RENDER_H + 40,
-            pos=[330, 30],
-            no_scrollbar=True,
-        ):
-            dpg.add_image("viewer_texture", width=RENDER_W, height=RENDER_H)
-
         with dpg.window(tag="main_window", label="MjGrok", no_title_bar=True):
             dpg.set_primary_window("main_window", True)
 
@@ -159,42 +142,33 @@ class MjGrokApp:
     # ── Playback controls ───────────────────────────────────────────────────
 
     def _on_seek(self, frame: int) -> None:
-        self._viewer_ctrl.seek(frame)
+        self._viewer.seek(frame)
 
     def _on_play(self) -> None:
-        self._viewer_ctrl.play(realtime_factor=1.0)
+        # Play is handled inside the viewer window itself; seek to current frame
+        # to ensure viewer is at the right position before the user uses its controls.
+        self._viewer.seek(self._viewer.current_frame)
 
     def _on_pause(self) -> None:
-        self._viewer_ctrl.pause()
+        pass  # Play/pause is managed within the interactive viewer window
 
     def _on_step_forward(self) -> None:
-        self._viewer_ctrl.step_forward()
+        frame = self._viewer.step_forward()
         if self._playback_panel:
-            self._playback_panel.set_current_frame(self._viewer_ctrl.current_frame)
+            self._playback_panel.set_current_frame(frame)
 
     def _on_step_backward(self) -> None:
-        self._viewer_ctrl.step_backward()
+        frame = self._viewer.step_backward()
         if self._playback_panel:
-            self._playback_panel.set_current_frame(self._viewer_ctrl.current_frame)
+            self._playback_panel.set_current_frame(frame)
 
     def _on_open_viewer(self) -> None:
         if self._cache is None:
             dpg.set_value("status_text", "Run a simulation first")
             return
-
-        # Show the floating viewer window (main thread — safe)
-        dpg.show_item("viewer_window")
-        dpg.set_value("status_text", "Loading viewer...")
-
-        cache = self._cache
-        scenario = self._scenario
         params = self._param_panel.collect_params()
-
-        def _load() -> None:
-            try:
-                self._viewer_ctrl.load(scenario, params, cache)
-                dpg.set_value("status_text", "Viewer ready")
-            except Exception as e:
-                dpg.set_value("status_text", f"Viewer error: {e}")
-
-        threading.Thread(target=_load, daemon=True).start()
+        try:
+            self._viewer.load(self._scenario, params, self._cache)
+            dpg.set_value("status_text", "Viewer opened")
+        except Exception as e:
+            dpg.set_value("status_text", f"Viewer error: {e}")

@@ -43,7 +43,10 @@ class Scenario(ABC):
     def plot_specs(self) -> list[PlotSpec]: ...
 
     @abstractmethod
-    def build_model(self, params: dict[str, Any]) -> mujoco.MjModel: ...
+    def build_model_xml(self, params: dict[str, Any]) -> str: ...
+
+    def build_model(self, params: dict[str, Any]) -> mujoco.MjModel:
+        return mujoco.MjModel.from_xml_string(self.build_model_xml(params))
 
     @abstractmethod
     def extract_series(

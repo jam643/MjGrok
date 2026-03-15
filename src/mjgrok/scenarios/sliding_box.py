@@ -169,9 +169,8 @@ class SlidingBoxScenario(Scenario):
             PlotSpec("ft", "Tangential Friction Force", "time (s)", "Ft (N)", ["ft"]),
         ]
 
-    def build_model(self, params: dict[str, Any]) -> mujoco.MjModel:
-        xml = XML_TEMPLATE.format(**params)
-        return mujoco.MjModel.from_xml_string(xml)
+    def build_model_xml(self, params: dict[str, Any]) -> str:
+        return XML_TEMPLATE.format(**params)
 
     def extract_series(
         self,
