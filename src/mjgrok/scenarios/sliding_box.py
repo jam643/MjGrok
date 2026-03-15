@@ -20,14 +20,25 @@ class SlidingBoxScenario(Scenario):
     def param_specs(self) -> list[ParamSpec]:
         return [
             ParamSpec(
-                "box_size",
-                "Half-size (m)",
+                "box_half_width",
+                "Half-width (m)",
                 "float",
                 0.25,
                 min_val=0.05,
                 max_val=1.0,
                 step=0.05,
-                tooltip="Half-extent of the cube (same in all dimensions)",
+                tooltip="Half-extent of the box in X and Y",
+                group="Box",
+            ),
+            ParamSpec(
+                "box_half_height",
+                "Half-height (m)",
+                "float",
+                0.25,
+                min_val=0.05,
+                max_val=1.0,
+                step=0.05,
+                tooltip="Half-extent of the box in Z",
                 group="Box",
             ),
             ParamSpec(
@@ -221,10 +232,11 @@ class SlidingBoxScenario(Scenario):
         floor.rgba = [0.8, 0.8, 0.8, 1.0]
 
         # ── Box body ──────────────────────────────────────────────────────────
-        box_size = float(params["box_size"])
+        box_hw = float(params["box_half_width"])
+        box_hh = float(params["box_half_height"])
         box_body = spec.worldbody.add_body()
         box_body.name = "box"
-        box_body.pos = [0.0, 0.0, box_size]
+        box_body.pos = [0.0, 0.0, box_hh]
         free = box_body.add_joint()
         free.name = "free"
         free.type = mujoco.mjtJoint.mjJNT_FREE
@@ -232,7 +244,7 @@ class SlidingBoxScenario(Scenario):
         box_geom = box_body.add_geom()
         box_geom.name = "box_geom"
         box_geom.type = mujoco.mjtGeom.mjGEOM_BOX
-        box_geom.size = [box_size, box_size, box_size]
+        box_geom.size = [box_hw, box_hw, box_hh]
         box_geom.mass = float(params["box_mass"])
         box_geom.friction = friction
         box_geom.solimp = solimp
