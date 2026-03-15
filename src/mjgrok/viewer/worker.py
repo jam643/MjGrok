@@ -2,6 +2,9 @@
 
 macOS: launched via `mjpython` (gets its own main thread for NSWindow).
 Linux: launched via plain `python` (no main-thread restriction).
+
+Receives a .npz with (scenario_name, params_json, qpos, qvel) and reconstructs
+the model by calling scenario.build_model(params) directly — no XML round-trip.
 """
 
 from __future__ import annotations
@@ -15,6 +18,8 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 
+from mjgrok.scenarios import SCENARIO_REGISTRY
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -23,11 +28,15 @@ def main() -> None:
     args = parser.parse_args()
 
     traj = np.load(args.npz, allow_pickle=True)
-    model = mujoco.MjModel.from_xml_string(str(traj["xml"]))
-    data = mujoco.MjData(model)
+    scenario_name = str(traj["scenario_name"])
+    params = json.loads(str(traj["params_json"]))
     qpos_traj: np.ndarray = traj["qpos"]  # (T, nq)
     qvel_traj: np.ndarray = traj["qvel"]  # (T, nv)
     n_frames = qpos_traj.shape[0]
+
+    scenario = SCENARIO_REGISTRY[scenario_name]
+    model = scenario.build_model(params)
+    data = mujoco.MjData(model)
 
     frame = 0
     last_ctrl_mtime = 0.0
@@ -41,7 +50,7 @@ def main() -> None:
 
     with mujoco.viewer.launch_passive(model, data) as handle:
         while handle.is_running():
-            # Poll control file for seek/play commands from the GUI
+            # Poll control file for seek commands from the GUI
             try:
                 mtime = os.path.getmtime(args.ctrl)
                 if mtime != last_ctrl_mtime:

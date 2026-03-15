@@ -9,28 +9,6 @@ import numpy as np
 
 from mjgrok.scenarios.base import ParamSpec, PlotSpec, Scenario
 
-XML_TEMPLATE = """\
-<mujoco model="sliding_box">
-  <option timestep="0.002" cone="{cone}" noslip_iterations="{noslip_iterations}"
-          impratio="{impratio}"/>
-  <worldbody>
-    <geom name="floor" type="plane" size="10 10 0.1"
-          friction="{friction_slide} {friction_spin} {friction_roll}"
-          solimp="{solimp_0} {solimp_1} {solimp_2} 0.5 2"
-          solref="{solref_0} {solref_1}"
-          rgba="0.8 0.8 0.8 1"/>
-    <body name="box" pos="0 0 0.5">
-      <freejoint/>
-      <geom type="box" size="0.25 0.25 0.25" mass="1.0"
-            friction="{friction_slide} {friction_spin} {friction_roll}"
-            solimp="{solimp_0} {solimp_1} {solimp_2} 0.5 2"
-            solref="{solref_0} {solref_1}"
-            rgba="0.2 0.6 0.9 1"/>
-    </body>
-  </worldbody>
-</mujoco>
-"""
-
 
 class SlidingBoxScenario(Scenario):
     name = "Sliding Box"
@@ -169,8 +147,60 @@ class SlidingBoxScenario(Scenario):
             PlotSpec("ft", "Tangential Friction Force", "time (s)", "Ft (N)", ["ft"]),
         ]
 
-    def build_model_xml(self, params: dict[str, Any]) -> str:
-        return XML_TEMPLATE.format(**params)
+    def build_spec(self, params: dict[str, Any]) -> mujoco.MjSpec:
+        spec = mujoco.MjSpec()
+
+        # ── Solver options ────────────────────────────────────────────────────
+        spec.option.timestep = 0.002
+        spec.option.cone = (
+            mujoco.mjtCone.mjCONE_ELLIPTIC
+            if params["cone"] == "elliptic"
+            else mujoco.mjtCone.mjCONE_PYRAMIDAL
+        )
+        spec.option.noslip_iterations = int(params["noslip_iterations"])
+        spec.option.impratio = float(params["impratio"])
+
+        friction = [
+            float(params["friction_slide"]),
+            float(params["friction_spin"]),
+            float(params["friction_roll"]),
+        ]
+        solimp = [
+            float(params["solimp_0"]),
+            float(params["solimp_1"]),
+            float(params["solimp_2"]),
+            0.5,  # midpoint (fixed)
+            2.0,  # power (fixed)
+        ]
+        solref = [float(params["solref_0"]), float(params["solref_1"])]
+
+        # ── Floor ─────────────────────────────────────────────────────────────
+        floor = spec.worldbody.add_geom()
+        floor.name = "floor"
+        floor.type = mujoco.mjtGeom.mjGEOM_PLANE
+        floor.size = [10.0, 10.0, 0.1]
+        floor.friction = friction
+        floor.solimp = solimp
+        floor.solref = solref
+        floor.rgba = [0.8, 0.8, 0.8, 1.0]
+
+        # ── Box body ──────────────────────────────────────────────────────────
+        box_body = spec.worldbody.add_body()
+        box_body.name = "box"
+        box_body.pos = [0.0, 0.0, 0.5]
+        box_body.add_freejoint()
+
+        box_geom = box_body.add_geom()
+        box_geom.name = "box_geom"
+        box_geom.type = mujoco.mjtGeom.mjGEOM_BOX
+        box_geom.size = [0.25, 0.25, 0.25]
+        box_geom.mass = 1.0
+        box_geom.friction = friction
+        box_geom.solimp = solimp
+        box_geom.solref = solref
+        box_geom.rgba = [0.2, 0.6, 0.9, 1.0]
+
+        return spec
 
     def extract_series(
         self,
@@ -189,9 +219,4 @@ class SlidingBoxScenario(Scenario):
             fn += abs(force_buf[0])
             ft += float(np.linalg.norm(force_buf[1:3]))
 
-        return {
-            "pos_x": pos_x,
-            "vel_x": vel_x,
-            "fn": fn,
-            "ft": ft,
-        }
+        return {"pos_x": pos_x, "vel_x": vel_x, "fn": fn, "ft": ft}

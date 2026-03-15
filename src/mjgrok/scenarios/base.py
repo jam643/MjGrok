@@ -43,10 +43,20 @@ class Scenario(ABC):
     def plot_specs(self) -> list[PlotSpec]: ...
 
     @abstractmethod
-    def build_model_xml(self, params: dict[str, Any]) -> str: ...
+    def build_spec(self, params: dict[str, Any]) -> mujoco.MjSpec:
+        """Build and return a configured MjSpec for the given parameters.
+
+        Concrete scenarios implement this. build_model() and build_model_xml()
+        are derived from it automatically.
+        """
+        ...
 
     def build_model(self, params: dict[str, Any]) -> mujoco.MjModel:
-        return mujoco.MjModel.from_xml_string(self.build_model_xml(params))
+        return self.build_spec(params).compile()
+
+    def build_model_xml(self, params: dict[str, Any]) -> str:
+        """Return the compiled XML string (used for debugging / IPC)."""
+        return self.build_spec(params).to_xml()
 
     @abstractmethod
     def extract_series(

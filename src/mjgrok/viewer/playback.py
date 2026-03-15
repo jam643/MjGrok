@@ -43,12 +43,17 @@ class ViewerLauncher:
         qpos = np.column_stack([cache.series_arr[f"qpos_{i}"] for i in range(nq)])
         qvel = np.column_stack([cache.series_arr[f"qvel_{i}"] for i in range(nv)])
 
-        xml = scenario.build_model_xml(params)
-
-        # Write trajectory file
+        # Write trajectory file — pass scenario name + params so the worker can
+        # reconstruct the model directly via build_model(), no XML serialization needed
         fd, npz_path = tempfile.mkstemp(suffix=".npz")
         os.close(fd)
-        np.savez(npz_path, xml=np.array(xml), qpos=qpos, qvel=qvel)
+        np.savez(
+            npz_path,
+            scenario_name=np.array(scenario.name),
+            params_json=np.array(json.dumps(params)),
+            qpos=qpos,
+            qvel=qvel,
+        )
         self._npz_path = npz_path
 
         # Write initial control file

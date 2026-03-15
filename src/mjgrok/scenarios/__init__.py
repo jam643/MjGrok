@@ -7,4 +7,14 @@ SCENARIOS: list[Scenario] = [
     SlidingBoxScenario(),
 ]
 
-__all__ = ["ParamSpec", "PlotSpec", "Scenario", "SlidingBoxScenario", "SCENARIOS"]
+# Keyed by Scenario.name — used by viewer worker to reconstruct model in subprocess
+SCENARIO_REGISTRY: dict[str, Scenario] = {s.name: s for s in SCENARIOS}
+
+__all__ = [
+    "ParamSpec",
+    "PlotSpec",
+    "Scenario",
+    "SlidingBoxScenario",
+    "SCENARIOS",
+    "SCENARIO_REGISTRY",
+]
