@@ -75,28 +75,6 @@ class SlidingBoxScenario(Scenario):
                 group="Friction",
             ),
             ParamSpec(
-                "friction_spin",
-                "Spin Friction",
-                "float",
-                0.005,
-                min_val=0.0,
-                max_val=0.1,
-                step=0.001,
-                tooltip="Torsional friction coefficient (MuJoCo friction[1])",
-                group="Friction",
-            ),
-            ParamSpec(
-                "friction_roll",
-                "Roll Friction",
-                "float",
-                0.0001,
-                min_val=0.0,
-                max_val=0.01,
-                step=0.0001,
-                tooltip="Rolling friction coefficient (MuJoCo friction[2])",
-                group="Friction",
-            ),
-            ParamSpec(
                 "timestep",
                 "Timestep (s)",
                 "float",
@@ -251,11 +229,7 @@ class SlidingBoxScenario(Scenario):
         spec.option.noslip_iterations = int(params["noslip_iterations"])
         spec.option.impratio = float(params["impratio"])
 
-        friction = [
-            float(params["friction_slide"]),
-            float(params["friction_spin"]),
-            float(params["friction_roll"]),
-        ]
+        friction = [float(params["friction_slide"]), 0.005, 0.0001]
         solimp = [
             float(params["solimp_0"]),
             float(params["solimp_1"]),
