@@ -53,14 +53,14 @@ class SlidingBoxScenario(Scenario):
                 group="Box",
             ),
             ParamSpec(
-                "force_x",
-                "Force X (N)",
+                "force_x_normalized",
+                "Horizontal Force (× mg)",
                 "float",
-                5.0,
-                min_val=-20.0,
-                max_val=20.0,
-                step=0.1,
-                tooltip="External force applied along X axis each step",
+                0.5,
+                min_val=-3.0,
+                max_val=3.0,
+                step=0.05,
+                tooltip="X force as a multiple of box weight (mg). 1.0 = force equals weight.",
                 group="Force",
             ),
             ParamSpec(
@@ -276,7 +276,8 @@ class SlidingBoxScenario(Scenario):
     ) -> None:
         # Apply force directly on the box body in X — no actuator needed with free joint
         body_id = model.body("box").id
-        data.xfrc_applied[body_id, 0] = float(params["force_x"])
+        mg = float(params["box_mass"]) * 10.0
+        data.xfrc_applied[body_id, 0] = float(params["force_x_normalized"]) * mg
 
     def extract_series(
         self,
