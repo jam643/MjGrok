@@ -47,6 +47,7 @@ class MjGrokApp:
         self._build_ui()
 
         dpg.setup_dearpygui()
+        dpg.maximize_viewport()
         dpg.show_viewport()
         self._on_run_clicked()
         dpg.start_dearpygui()
