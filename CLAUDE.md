@@ -17,7 +17,6 @@ Multiple trajectories from a parameter sweep are overlaid in plots, and a dropdo
 
 - **GUI + plots**: DearPyGUI — immediate-mode, GPU-accelerated, built-in plotting, no browser overhead, thread-safe `set_value()` from background threads
 - **Simulation**: MuJoCo CPU (default), macOS
-- **Viewer**: `mujoco.Renderer` (offscreen) → DPG texture displayed in a floating window inside the GUI
 - **Package management**: `uv` | **Linting/formatting**: `ruff`
 
 ## macOS Main-Thread Constraint
@@ -87,6 +86,11 @@ class Scenario(ABC):
 ## Sweep Architecture
 
 Sweepable params show a checkbox in the param panel. When checked, the slider is replaced by Min / Max / N inputs. `ParamPanel.get_sweep_configs()` returns the configured ranges. The runner will execute N sequential simulations and the plot panel will overlay all resulting trajectories. A dropdown in the playback panel selects which sweep trajectory to view.
+
+## Workflow
+
+- Use ruff for linting and formatting
+- **Commit and push after each feature** before starting the next. Keep commits scoped to one feature.
 
 ## Adding New Scenarios
 

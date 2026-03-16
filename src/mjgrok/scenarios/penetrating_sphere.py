@@ -38,9 +38,9 @@ class PenetratingSphereScenario(Scenario):
                 "penetration_depth",
                 "Penetration Depth (× radius)",
                 "float",
-                0.1,
+                1.0,
                 min_val=0.0,
-                max_val=0.8,
+                max_val=2.0,
                 step=0.01,
                 tooltip=(
                     "Initial penetration depth as a fraction of sphere radius. "

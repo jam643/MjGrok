@@ -28,6 +28,7 @@ class MjGrokApp:
         self._analytical_labels: set[str] = set()
         self._n_sim_expected: int = 0
         self._viewer = ViewerLauncher()
+        self._viewer.set_on_frame(self._on_viewer_frame)
         self._runner = SimulationRunner(
             on_done=self._on_sim_done,
             on_error=self._on_sim_error,
@@ -297,7 +298,11 @@ class MjGrokApp:
         # Update scrub to the first completed trajectory if none selected yet
         selected = self._playback_panel.get_selected_trajectory()
         if not selected or selected == cache.label:
-            self._playback_panel.set_frame_count(cache.frame_count())
+            n = cache.frame_count()
+            self._playback_panel.set_frame_count(n)
+            self._viewer._n_frames = n
+            if len(cache.times) >= 2:
+                self._viewer._dt = cache.times[1] - cache.times[0]
 
         # Count only simulation completions (analytical caches are pre-populated)
         n_sim_done = sum(1 for lbl in self._caches if lbl not in self._analytical_labels)
@@ -325,16 +330,26 @@ class MjGrokApp:
     def _on_trajectory_changed(self, label: str) -> None:
         cache = self._caches.get(label)
         if cache and self._playback_panel:
-            self._playback_panel.set_frame_count(cache.frame_count())
+            n = cache.frame_count()
+            self._playback_panel.set_frame_count(n)
+            self._viewer._n_frames = n
+            self._viewer._current_frame = 0
+            if len(cache.times) >= 2:
+                self._viewer._dt = cache.times[1] - cache.times[0]
 
     def _on_seek(self, frame: int) -> None:
         self._viewer.seek(frame)
 
     def _on_play(self) -> None:
-        self._viewer.seek(self._viewer.current_frame)
+        self._viewer.play()
 
     def _on_pause(self) -> None:
-        pass  # Play/pause is managed within the interactive viewer window
+        self._viewer.pause()
+
+    def _on_viewer_frame(self, frame: int) -> None:
+        """Called from play thread — only dpg.set_value is safe here."""
+        if self._playback_panel:
+            self._playback_panel.set_current_frame(frame)
 
     def _on_step_forward(self) -> None:
         frame = self._viewer.step_forward()

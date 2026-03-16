@@ -197,10 +197,28 @@ class SlidingBoxScenario(Scenario):
 
     def plot_specs(self) -> list[PlotSpec]:
         return [
-            PlotSpec("pos_x", "Position X", "time (s)", "x (m)", ["pos_x"]),
-            PlotSpec("vel_x", "Velocity X", "time (s)", "vel (m/s)", ["vel_x"]),
-            PlotSpec("fn", "Normal Contact Force", "time (s)", "Fn (N)", ["fn"]),
-            PlotSpec("ft", "Tangential Friction Force", "time (s)", "Ft (N)", ["ft"]),
+            PlotSpec("pos_x", "Position X", "time (s)", "x (m)", ["pos_x"], group="Kinematics"),
+            PlotSpec("vel_x", "Velocity X", "time (s)", "vel (m/s)", ["vel_x"], group="Kinematics"),
+            PlotSpec(
+                "fn", "Normal Contact Force", "time (s)", "Fn (N)", ["fn"],
+                group="Contact Forces",
+            ),
+            PlotSpec(
+                "ft", "Tangential Friction Force", "time (s)", "Ft (N)", ["ft"],
+                group="Contact Forces",
+            ),
+            PlotSpec(
+                "ncon", "Contact Points", "time (s)", "count", ["ncon"],
+                group="Contact Forces",
+            ),
+            PlotSpec(
+                "solver_niter", "Solver Iterations", "time (s)", "iterations", ["solver_niter"],
+                group="Solver",
+            ),
+            PlotSpec(
+                "max_pen", "Max Penetration Depth", "time (s)", "depth (m)", ["max_pen"],
+                group="Solver",
+            ),
         ]
 
     def build_spec(self, params: dict[str, Any]) -> mujoco.MjSpec:
@@ -298,7 +316,14 @@ class SlidingBoxScenario(Scenario):
             fn += abs(force_buf[0])
             ft += float(np.linalg.norm(force_buf[1:3]))
 
-        return {"pos_x": pos_x, "vel_x": vel_x, "fn": fn, "ft": ft}
+        solver_niter = int(data.solver_niter[0])
+        max_pen = max((max(0.0, -data.contact[i].dist) for i in range(data.ncon)), default=0.0)
+
+        return {
+            "pos_x": pos_x, "vel_x": vel_x,
+            "fn": fn, "ft": ft, "ncon": float(data.ncon),
+            "solver_niter": float(solver_niter), "max_pen": max_pen,
+        }
 
     def analytical_solution(
         self,

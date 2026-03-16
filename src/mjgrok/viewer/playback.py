@@ -17,6 +17,9 @@ import platform
 import subprocess
 import sys
 import tempfile
+import threading
+import time
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -32,6 +35,39 @@ class ViewerLauncher:
         self._npz_path: str | None = None
         self._n_frames: int = 0
         self._current_frame: int = 0
+        self._dt: float = 0.002
+        self._play_thread: threading.Thread | None = None
+        self._play_stop = threading.Event()
+        self._on_frame: Callable[[int], None] | None = None
+        self.fps: float = 30.0
+
+    def set_on_frame(self, callback: Callable[[int], None]) -> None:
+        """Register a callback invoked (from play thread) on each frame advance."""
+        self._on_frame = callback
+
+    def play(self) -> None:
+        """Start auto-advancing frames at self.fps. No-op if already playing."""
+        if self._play_thread and self._play_thread.is_alive():
+            return
+        self._play_stop.clear()
+
+        def _loop() -> None:
+            interval = 1.0 / self.fps
+            frame_step = max(1, round(interval / self._dt))
+            while not self._play_stop.is_set():
+                if self._current_frame >= self._n_frames - 1:
+                    self._play_stop.set()
+                    break
+                self.seek(self._current_frame + frame_step)
+                if self._on_frame:
+                    self._on_frame(self._current_frame)
+                time.sleep(interval)
+
+        self._play_thread = threading.Thread(target=_loop, daemon=True)
+        self._play_thread.start()
+
+    def pause(self) -> None:
+        self._play_stop.set()
 
     def load(self, scenario: Scenario, params: dict[str, Any], cache: TrajectoryCache) -> None:
         """Write trajectory to temp files and spawn the viewer subprocess."""
@@ -74,6 +110,7 @@ class ViewerLauncher:
         self._proc = subprocess.Popen(cmd)
 
     def close(self) -> None:
+        self.pause()
         if self._proc is not None:
             self._proc.terminate()
             self._proc = None
