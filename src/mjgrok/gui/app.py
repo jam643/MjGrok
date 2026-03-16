@@ -137,11 +137,10 @@ class MjGrokApp:
                     dpg.add_progress_bar(tag="progress_bar", default_value=0.0, width=-1)
                     dpg.add_text("Ready", tag="status_text")
 
-                # Right column: plots + playback
+                # Right column: plots (scrollable) + playback (fixed footer)
                 with dpg.child_window(tag="right_panel", border=False):
-                    with dpg.child_window(tag="plot_container", height=780, border=False):
+                    with dpg.child_window(tag="plot_container", height=-120, border=False):
                         pass
-                    dpg.add_separator()
                     with dpg.child_window(tag="playback_container", height=-1, border=False):
                         pass
 
@@ -231,7 +230,8 @@ class MjGrokApp:
         analytical_caches: list[TrajectoryCache] = []
         if show_analytical:
             for sim_label, params in labeled_params:
-                a_cache = self._scenario.analytical_solution(params, duration=5.0, dt=0.002)
+                dur = self._scenario.sim_duration
+                a_cache = self._scenario.analytical_solution(params, duration=dur, dt=0.002)
                 if a_cache is not None:
                     a_label = f"Analytical ({sim_label})" if sim_label else "Analytical"
                     a_cache.label = a_label
@@ -256,12 +256,14 @@ class MjGrokApp:
             self._runner.run(
                 self._scenario,
                 labeled_params[0][1],
-                duration=5.0,
+                duration=self._scenario.sim_duration,
                 dt=0.002,
                 label=labeled_params[0][0],
             )
         else:
-            self._runner.run_batch(self._scenario, labeled_params, duration=5.0, dt=0.002)
+            self._runner.run_batch(
+                self._scenario, labeled_params, duration=self._scenario.sim_duration, dt=0.002
+            )
 
     def _build_labeled_params(
         self,
@@ -302,7 +304,7 @@ class MjGrokApp:
         if n_sim_done == self._n_sim_expected:
             dpg.set_value(
                 "status_text",
-                f"Done — {self._n_sim_expected} trajectory/ies, {cache.frame_count()} frames each",
+                f"Done - {self._n_sim_expected} trajectory, {cache.frame_count()} frames each",
             )
             dpg.set_value("progress_bar", 1.0)
         else:

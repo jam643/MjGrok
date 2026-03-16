@@ -17,6 +17,10 @@ class PenetratingSphereScenario(Scenario):
         "Explore how solimp/solref/impratio govern constraint stiffness and penetration resolution."
     )
 
+    @property
+    def sim_duration(self) -> float:
+        return 1.0
+
     def param_specs(self) -> list[ParamSpec]:
         return [
             ParamSpec(

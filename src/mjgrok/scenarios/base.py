@@ -34,6 +34,7 @@ class PlotSpec:
     x_label: str
     y_label: str
     series_keys: list[str]  # keys into TrajectoryCache.series
+    group: str = ""  # collapsible section label; empty = ungrouped (shown at top)
 
 
 class Scenario(ABC):
@@ -79,6 +80,11 @@ class Scenario(ABC):
 
     def default_params(self) -> dict[str, Any]:
         return {spec.name: spec.default for spec in self.param_specs()}
+
+    @property
+    def sim_duration(self) -> float:
+        """Default simulation duration in seconds. Override in subclasses to change."""
+        return 5.0
 
     def analytical_solution(
         self,
