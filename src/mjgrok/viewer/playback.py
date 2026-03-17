@@ -154,22 +154,46 @@ def _write_ctrl(path: str, frame: int) -> None:
         json.dump({"frame": frame}, f)
 
 
+def _copy_model_arrays(dest: mujoco.MjModel, src: mujoco.MjModel) -> None:
+    """Copy all writable numpy array fields from src into dest in-place.
+
+    Only copies arrays whose shapes match — this is safe for parameter-only
+    changes (friction, mass, geometry size, etc.) where topology is unchanged.
+    Scalar fields and read-only attributes are skipped silently.
+    """
+    for name in dir(src):
+        if name.startswith("_"):
+            continue
+        src_val = getattr(src, name, None)
+        if not isinstance(src_val, np.ndarray):
+            continue
+        try:
+            dest_val = getattr(dest, name)
+            if isinstance(dest_val, np.ndarray) and dest_val.shape == src_val.shape:
+                dest_val[:] = src_val
+        except (AttributeError, ValueError, TypeError):
+            pass
+
+
 class InProcessViewer:
     """MuJoCo passive viewer running in a background thread (same process).
 
     Works on Linux where launch_passive() has no main-thread restriction.
     Not suitable for macOS (NSWindow requires the main thread).
 
-    Trajectory data is swappable while the viewer runs: call reload_trajectory()
-    after a new simulation completes to hot-reload without reopening the window.
+    Both trajectory data and model parameters are hot-swappable while the
+    viewer runs: call reload_trajectory() after a new simulation completes
+    and the viewer will update on the next render tick without reopening.
     """
 
     def __init__(self) -> None:
         self._viewer_thread: threading.Thread | None = None
         self._handle: Any = None
         self._stop_event = threading.Event()
-        # Trajectory state — protected by _traj_lock for atomic swaps
+        # Trajectory + model state — protected by _traj_lock for atomic swaps
         self._traj_lock = threading.Lock()
+        self._model: mujoco.MjModel | None = None
+        self._pending_model: mujoco.MjModel | None = None  # applied inside handle.lock()
         self._qpos_traj: np.ndarray | None = None
         self._qvel_traj: np.ndarray | None = None
         self._n_frames: int = 0
@@ -196,7 +220,9 @@ class InProcessViewer:
         self.close()
 
         qpos, qvel = self._arrays_from_cache(cache)
+        self._model = scenario.build_model(params)
         with self._traj_lock:
+            self._pending_model = None
             self._qpos_traj = qpos
             self._qvel_traj = qvel
             self._n_frames = cache.frame_count()
@@ -205,21 +231,25 @@ class InProcessViewer:
 
         self._stop_event.clear()
 
-        model = scenario.build_model(params)
-        data = mujoco.MjData(model)
+        data = mujoco.MjData(self._model)
 
         def _viewer_loop() -> None:
-            with mujoco.viewer.launch_passive(model, data) as handle:
+            with mujoco.viewer.launch_passive(self._model, data) as handle:
                 self._handle = handle
                 while handle.is_running() and not self._stop_event.is_set():
                     with handle.lock():
                         with self._traj_lock:
+                            # Apply pending model update (in-place copy so the viewer's
+                            # C-side pointer remains valid)
+                            if self._pending_model is not None:
+                                _copy_model_arrays(self._model, self._pending_model)
+                                self._pending_model = None
                             f = min(self._current_frame, self._n_frames - 1)
                             qpos_row = self._qpos_traj[f]
                             qvel_row = self._qvel_traj[f]
                         data.qpos[: len(qpos_row)] = qpos_row
                         data.qvel[: len(qvel_row)] = qvel_row
-                        mujoco.mj_forward(model, data)
+                        mujoco.mj_forward(self._model, data)
                     handle.sync()
                     time.sleep(1.0 / 60.0)
                 self._handle = None
@@ -227,16 +257,21 @@ class InProcessViewer:
         self._viewer_thread = threading.Thread(target=_viewer_loop, daemon=True)
         self._viewer_thread.start()
 
-    def reload_trajectory(self, cache: TrajectoryCache) -> bool:
-        """Hot-swap trajectory data in the running viewer.
+    def reload_trajectory(
+        self, scenario: Scenario, params: dict[str, Any], cache: TrajectoryCache
+    ) -> bool:
+        """Hot-swap model parameters and trajectory data in the running viewer.
 
-        The viewer window stays open; on the next render tick it will display
-        frame 0 of the new trajectory. Returns True if the viewer was running.
+        The viewer window stays open. On the next render tick the model arrays
+        are copied in-place (inside handle.lock) and the new trajectory replayed.
+        Returns True if the viewer was running.
         """
         if not self.is_running():
             return False
+        new_model = scenario.build_model(params)
         qpos, qvel = self._arrays_from_cache(cache)
         with self._traj_lock:
+            self._pending_model = new_model
             self._qpos_traj = qpos
             self._qvel_traj = qvel
             self._n_frames = cache.frame_count()
@@ -252,7 +287,9 @@ class InProcessViewer:
             with contextlib.suppress(Exception):
                 handle.close()
         self._handle = None
+        self._model = None
         with self._traj_lock:
+            self._pending_model = None
             self._qpos_traj = None
             self._qvel_traj = None
             self._n_frames = 0

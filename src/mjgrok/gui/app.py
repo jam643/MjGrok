@@ -298,7 +298,11 @@ class MjGrokApp:
         if not selected or selected == cache.label:
             n = cache.frame_count()
             # Hot-reload InProcessViewer (updates _n_frames/_dt internally under lock)
-            if isinstance(self._viewer, InProcessViewer) and self._viewer.reload_trajectory(cache):
+            reloaded = (
+                isinstance(self._viewer, InProcessViewer)
+                and self._viewer.reload_trajectory(self._scenario, cache.params, cache)
+            )
+            if reloaded:
                 self._playback_panel.update_frame_count(n)
             else:
                 self._playback_panel.set_frame_count(n)
