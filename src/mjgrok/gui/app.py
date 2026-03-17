@@ -64,9 +64,9 @@ class MjGrokApp:
         if not regular.exists():
             return
         with dpg.font_registry():
-            dpg.bind_font(dpg.add_font(str(regular), 14))
+            dpg.bind_font(dpg.add_font(str(regular), 18))
             header_src = semibold if semibold.exists() else regular
-            self._font_header = dpg.add_font(str(header_src), 18)
+            self._font_header = dpg.add_font(str(header_src), 24)
 
     def _build_ui(self) -> None:
         with dpg.window(tag="main_window", label="MjGrok", no_title_bar=True):
@@ -97,14 +97,14 @@ class MjGrokApp:
                             callback=self._on_reset_clicked,
                             small=True,
                         )
-                    with dpg.child_window(tag="param_container", height=540, border=False):
+                    with dpg.child_window(tag="param_container", height=700, border=False):
                         pass
 
                     dpg.add_spacer(height=6)
                     dpg.add_separator()
                     dpg.add_spacer(height=6)
 
-                    with dpg.child_window(tag="saveload_container", height=90, border=False):
+                    with dpg.child_window(tag="saveload_container", height=110, border=False):
                         pass
 
                     dpg.add_spacer(height=6)

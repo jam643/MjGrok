@@ -80,7 +80,7 @@ class PlotPanel:
             label=spec.title,
             tag=f"plot_{spec.plot_id}",
             parent=parent,
-            height=180,
+            height=250,
             width=-1,
         )
         dpg.add_plot_legend(parent=f"plot_{spec.plot_id}")
