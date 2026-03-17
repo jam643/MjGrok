@@ -1,12 +1,14 @@
 """Scenario registry."""
 
 from mjgrok.scenarios.base import ParamSpec, PlotSpec, Scenario
+from mjgrok.scenarios.parallel_jaw_grasp import ParallelJawGraspScenario
 from mjgrok.scenarios.penetrating_sphere import PenetratingSphereScenario
 from mjgrok.scenarios.sliding_box import SlidingBoxScenario
 
 SCENARIOS: list[Scenario] = [
     SlidingBoxScenario(),
     PenetratingSphereScenario(),
+    ParallelJawGraspScenario(),
 ]
 
 # Keyed by Scenario.name — used by viewer worker to reconstruct model in subprocess
@@ -16,6 +18,7 @@ __all__ = [
     "ParamSpec",
     "PlotSpec",
     "Scenario",
+    "ParallelJawGraspScenario",
     "PenetratingSphereScenario",
     "SlidingBoxScenario",
     "SCENARIOS",
