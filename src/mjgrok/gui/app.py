@@ -140,7 +140,7 @@ class MjGrokApp:
 
                 # Right column: plots (scrollable) + playback (fixed footer)
                 with dpg.child_window(tag="right_panel", border=False):
-                    with dpg.child_window(tag="plot_container", height=-120, border=False):
+                    with dpg.child_window(tag="plot_container", height=-170, border=False):
                         pass
                     with dpg.child_window(tag="playback_container", height=-1, border=False):
                         pass
