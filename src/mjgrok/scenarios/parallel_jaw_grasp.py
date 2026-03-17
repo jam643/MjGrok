@@ -344,7 +344,7 @@ class ParallelJawGraspScenario(Scenario):
         os_ = float(params["object_size"])
 
         finger_pos_x = fs + os_
-        height = 1.0
+        height = 0.0
 
         # ── Fixed finger (attached to world body, no joint) ───────────────────
         fb = spec.worldbody.add_body()
