@@ -298,9 +298,13 @@ class MjGrokApp:
         if not selected or selected == cache.label:
             n = cache.frame_count()
             self._playback_panel.set_frame_count(n)
-            self._viewer._n_frames = n
-            if len(cache.times) >= 2:
-                self._viewer._dt = cache.times[1] - cache.times[0]
+            # Hot-reload InProcessViewer (updates _n_frames/_dt internally under lock)
+            if isinstance(self._viewer, InProcessViewer):
+                self._viewer.reload_trajectory(cache)
+            else:
+                self._viewer._n_frames = n
+                if len(cache.times) >= 2:
+                    self._viewer._dt = cache.times[1] - cache.times[0]
 
         # Count only simulation completions (analytical caches are pre-populated)
         n_sim_done = sum(1 for lbl in self._caches if lbl not in self._analytical_labels)

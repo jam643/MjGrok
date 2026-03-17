@@ -159,12 +159,19 @@ class InProcessViewer:
 
     Works on Linux where launch_passive() has no main-thread restriction.
     Not suitable for macOS (NSWindow requires the main thread).
+
+    Trajectory data is swappable while the viewer runs: call reload_trajectory()
+    after a new simulation completes to hot-reload without reopening the window.
     """
 
     def __init__(self) -> None:
         self._viewer_thread: threading.Thread | None = None
         self._handle: Any = None
         self._stop_event = threading.Event()
+        # Trajectory state — protected by _traj_lock for atomic swaps
+        self._traj_lock = threading.Lock()
+        self._qpos_traj: np.ndarray | None = None
+        self._qvel_traj: np.ndarray | None = None
         self._n_frames: int = 0
         self._current_frame: int = 0
         self._dt: float = 0.002
@@ -176,40 +183,66 @@ class InProcessViewer:
     def set_on_frame(self, callback: Callable[[int], None]) -> None:
         self._on_frame = callback
 
-    def load(self, scenario: Scenario, params: dict[str, Any], cache: TrajectoryCache) -> None:
-        """Build model and launch passive viewer in a background thread."""
-        self.close()
-
+    @staticmethod
+    def _arrays_from_cache(cache: TrajectoryCache) -> tuple[np.ndarray, np.ndarray]:
         nq = sum(1 for k in cache.series_arr if k.startswith("qpos_"))
         nv = sum(1 for k in cache.series_arr if k.startswith("qvel_"))
         qpos = np.column_stack([cache.series_arr[f"qpos_{i}"] for i in range(nq)])
         qvel = np.column_stack([cache.series_arr[f"qvel_{i}"] for i in range(nv)])
+        return qpos, qvel
 
-        self._n_frames = cache.frame_count()
-        self._current_frame = 0
+    def load(self, scenario: Scenario, params: dict[str, Any], cache: TrajectoryCache) -> None:
+        """Build model and launch passive viewer in a background thread."""
+        self.close()
+
+        qpos, qvel = self._arrays_from_cache(cache)
+        with self._traj_lock:
+            self._qpos_traj = qpos
+            self._qvel_traj = qvel
+            self._n_frames = cache.frame_count()
+            self._current_frame = 0
+            self._dt = cache.times[1] - cache.times[0] if len(cache.times) >= 2 else 0.002
+
         self._stop_event.clear()
 
         model = scenario.build_model(params)
         data = mujoco.MjData(model)
 
-        def _apply_frame(f: int) -> None:
-            data.qpos[:] = qpos[f]
-            data.qvel[:] = qvel[f]
-            mujoco.mj_forward(model, data)
-
         def _viewer_loop() -> None:
-            _apply_frame(0)
             with mujoco.viewer.launch_passive(model, data) as handle:
                 self._handle = handle
                 while handle.is_running() and not self._stop_event.is_set():
                     with handle.lock():
-                        _apply_frame(self._current_frame)
+                        with self._traj_lock:
+                            f = min(self._current_frame, self._n_frames - 1)
+                            qpos_row = self._qpos_traj[f]
+                            qvel_row = self._qvel_traj[f]
+                        data.qpos[: len(qpos_row)] = qpos_row
+                        data.qvel[: len(qvel_row)] = qvel_row
+                        mujoco.mj_forward(model, data)
                     handle.sync()
                     time.sleep(1.0 / 60.0)
                 self._handle = None
 
         self._viewer_thread = threading.Thread(target=_viewer_loop, daemon=True)
         self._viewer_thread.start()
+
+    def reload_trajectory(self, cache: TrajectoryCache) -> bool:
+        """Hot-swap trajectory data in the running viewer.
+
+        The viewer window stays open; on the next render tick it will display
+        frame 0 of the new trajectory. Returns True if the viewer was running.
+        """
+        if not self.is_running():
+            return False
+        qpos, qvel = self._arrays_from_cache(cache)
+        with self._traj_lock:
+            self._qpos_traj = qpos
+            self._qvel_traj = qvel
+            self._n_frames = cache.frame_count()
+            self._current_frame = 0
+            self._dt = cache.times[1] - cache.times[0] if len(cache.times) >= 2 else 0.002
+        return True
 
     def close(self) -> None:
         self.pause()
@@ -219,14 +252,18 @@ class InProcessViewer:
             with contextlib.suppress(Exception):
                 handle.close()
         self._handle = None
-        self._n_frames = 0
-        self._current_frame = 0
+        with self._traj_lock:
+            self._qpos_traj = None
+            self._qvel_traj = None
+            self._n_frames = 0
+            self._current_frame = 0
 
     def is_running(self) -> bool:
         return self._viewer_thread is not None and self._viewer_thread.is_alive()
 
     def seek(self, frame: int) -> None:
-        self._current_frame = max(0, min(frame, self._n_frames - 1))
+        with self._traj_lock:
+            self._current_frame = max(0, min(frame, self._n_frames - 1))
 
     def play(self) -> None:
         if self._play_thread and self._play_thread.is_alive():
@@ -235,14 +272,19 @@ class InProcessViewer:
 
         def _loop() -> None:
             interval = 1.0 / self.fps
-            frame_step = max(1, round(interval / self._dt))
             while not self._play_stop.is_set():
-                if self._current_frame >= self._n_frames - 1:
-                    self._play_stop.set()
-                    break
-                self.seek(self._current_frame + frame_step)
+                with self._traj_lock:
+                    frame_step = max(1, round(interval / self._dt))
+                    at_end = self._current_frame >= self._n_frames - 1
+                    if at_end:
+                        self._play_stop.set()
+                        break
+                    self._current_frame = min(
+                        self._current_frame + frame_step, self._n_frames - 1
+                    )
+                    current = self._current_frame
                 if self._on_frame:
-                    self._on_frame(self._current_frame)
+                    self._on_frame(current)
                 time.sleep(interval)
 
         self._play_thread = threading.Thread(target=_loop, daemon=True)
@@ -252,12 +294,14 @@ class InProcessViewer:
         self._play_stop.set()
 
     def step_forward(self) -> int:
-        self.seek(self._current_frame + 1)
-        return self._current_frame
+        with self._traj_lock:
+            self._current_frame = min(self._current_frame + 1, self._n_frames - 1)
+            return self._current_frame
 
     def step_backward(self) -> int:
-        self.seek(self._current_frame - 1)
-        return self._current_frame
+        with self._traj_lock:
+            self._current_frame = max(self._current_frame - 1, 0)
+            return self._current_frame
 
     @property
     def current_frame(self) -> int:
