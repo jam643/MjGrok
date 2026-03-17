@@ -107,6 +107,13 @@ class PlaybackPanel:
             dpg.configure_item("playback_scrub", max_value=n - 1)
             dpg.set_value("playback_scrub", 0)
 
+    def update_frame_count(self, n: int) -> None:
+        """Update scrub slider max without resetting position (used during hot-reload)."""
+        if n > 0:
+            current = dpg.get_value("playback_scrub")
+            dpg.configure_item("playback_scrub", max_value=n - 1)
+            dpg.set_value("playback_scrub", min(current, n - 1))
+
     def set_current_frame(self, frame: int) -> None:
         dpg.set_value("playback_scrub", frame)
 

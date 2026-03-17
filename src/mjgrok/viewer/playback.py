@@ -240,7 +240,7 @@ class InProcessViewer:
             self._qpos_traj = qpos
             self._qvel_traj = qvel
             self._n_frames = cache.frame_count()
-            self._current_frame = 0
+            self._current_frame = min(self._current_frame, self._n_frames - 1)
             self._dt = cache.times[1] - cache.times[0] if len(cache.times) >= 2 else 0.002
         return True
 
