@@ -229,6 +229,30 @@ class ParallelJawGraspScenario(Scenario):
                 group="Contact Solver",
             ),
             ParamSpec(
+                "solimp_3",
+                "solimp midpoint",
+                "float",
+                0.5,
+                min_val=0.1,
+                max_val=0.9,
+                step=0.05,
+                sweepable=True,
+                tooltip="Constraint impedance: midpoint of transition (0–1)",
+                group="Contact Solver",
+            ),
+            ParamSpec(
+                "solimp_4",
+                "solimp power",
+                "float",
+                2.0,
+                min_val=1.0,
+                max_val=5.0,
+                step=0.1,
+                sweepable=True,
+                tooltip="Constraint impedance: power of transition curve",
+                group="Contact Solver",
+            ),
+            ParamSpec(
                 "solref_0",
                 "solref timeconst",
                 "float",
@@ -262,6 +286,21 @@ class ParallelJawGraspScenario(Scenario):
                 step=1.0,
                 sweepable=True,
                 tooltip="Ratio of frictional to normal constraint impedance",
+                group="Contact Solver",
+            ),
+            ParamSpec(
+                "noslip_iterations",
+                "No-slip Iterations",
+                "int",
+                0,
+                min_val=0,
+                max_val=20,
+                step=1,
+                sweepable=True,
+                tooltip=(
+                    "Extra no-slip solver iterations; 0 = disabled. "
+                    "Reduces frictional slip at the cost of extra solve time."
+                ),
                 group="Contact Solver",
             ),
         ]
@@ -327,13 +366,14 @@ class ParallelJawGraspScenario(Scenario):
         spec.option.solver = _SOLVER_MAP[params["solver"]]
         spec.option.cone = _CONE_MAP[params["cone"]]
         spec.option.impratio = float(params["impratio"])
+        spec.option.noslip_iterations = int(params["noslip_iterations"])
 
         solimp = [
             float(params["solimp_0"]),
             float(params["solimp_1"]),
             float(params["solimp_2"]),
-            0.5,
-            2.0,
+            float(params["solimp_3"]),
+            float(params["solimp_4"]),
         ]
         solref = [float(params["solref_0"]), float(params["solref_1"])]
         friction = [float(params["friction_slide"]), 0.005, 0.0001]
