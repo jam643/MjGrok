@@ -83,7 +83,11 @@ class PlotPanel:
             height=250,
             width=-1,
         )
-        dpg.add_plot_legend(parent=f"plot_{spec.plot_id}")
+        dpg.add_plot_legend(
+            parent=f"plot_{spec.plot_id}",
+            location=dpg.mvPlot_Location_NorthEast,
+            outside=True,
+        )
         dpg.add_plot_axis(
             dpg.mvXAxis, label=spec.x_label, tag=f"xaxis_{spec.plot_id}",
             parent=f"plot_{spec.plot_id}",
