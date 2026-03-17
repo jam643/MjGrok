@@ -281,7 +281,7 @@ class ParallelJawGraspScenario(Scenario):
                 "Impedance Ratio",
                 "float",
                 1.0,
-                min_val=1.0,
+                min_val=0.0,
                 max_val=100.0,
                 step=1.0,
                 sweepable=True,

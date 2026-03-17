@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -88,6 +89,7 @@ class SimulationRunner:
                 data = mujoco.MjData(model)
                 cache = TrajectoryCache(params=dict(params), label=label)
 
+                t0 = time.perf_counter()
                 for step in range(total_steps):
                     if self._cancel_event.is_set():
                         return
@@ -104,6 +106,7 @@ class SimulationRunner:
                         overall = (run_idx + (step + 1) / total_steps) / total_runs
                         self.on_progress(overall)
 
+                cache.rollout_ms = (time.perf_counter() - t0) * 1000.0
                 cache.finalize()
                 self.on_done(cache)
 

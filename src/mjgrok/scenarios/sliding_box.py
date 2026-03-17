@@ -187,7 +187,7 @@ class SlidingBoxScenario(Scenario):
                 "impratio",
                 "float",
                 1.0,
-                min_val=0.1,
+                min_val=0.0,
                 max_val=100.0,
                 step=0.1,
                 tooltip="Ratio of impedance to constraint reference (impratio)",

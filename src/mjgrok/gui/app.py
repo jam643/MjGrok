@@ -276,9 +276,7 @@ class MjGrokApp:
             return [("", base_params)]
 
         # Cartesian product across all active sweeps
-        sweep_options = [
-            [(sc.name, v) for v in sc.values] for sc in sweep_configs
-        ]
+        sweep_options = [[(sc.name, v) for v in sc.values] for sc in sweep_configs]
         runs = []
         for combo in itertools.product(*sweep_options):
             params = dict(base_params)
@@ -307,9 +305,15 @@ class MjGrokApp:
         # Count only simulation completions (analytical caches are pre-populated)
         n_sim_done = sum(1 for lbl in self._caches if lbl not in self._analytical_labels)
         if n_sim_done == self._n_sim_expected:
+            total_ms = sum(
+                c.rollout_ms
+                for lbl, c in self._caches.items()
+                if lbl not in self._analytical_labels
+            )
             dpg.set_value(
                 "status_text",
-                f"Done - {self._n_sim_expected} trajectory, {cache.frame_count()} frames each",
+                f"Done - {self._n_sim_expected} trajectory, {cache.frame_count()} frames each"
+                f" | rollout {total_ms:.1f} ms",
             )
             dpg.set_value("progress_bar", 1.0)
         else:

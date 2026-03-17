@@ -15,6 +15,8 @@ class TrajectoryCache:
     times: list[float] = field(default_factory=list)
     series: dict[str, list[float]] = field(default_factory=dict)
 
+    rollout_ms: float = 0.0  # wall-clock time for the mj_step loop (milliseconds)
+
     # Finalized arrays (set after finalize())
     _times_arr: np.ndarray | None = field(default=None, repr=False)
     _series_arr: dict[str, np.ndarray] | None = field(default=None, repr=False)
