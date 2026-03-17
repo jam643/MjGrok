@@ -81,6 +81,13 @@ class PlaybackPanel:
                 width=100,
             )
 
+        dpg.add_checkbox(
+            tag="inprocess_viewer",
+            label="In-process viewer (Linux; uncheck for macOS subprocess mode)",
+            default_value=True,
+            parent=self._parent,
+        )
+
     def set_trajectories(self, labels: list[str]) -> None:
         """Populate the trajectory dropdown. Must be called from main thread."""
         if len(labels) > 1:
@@ -102,3 +109,6 @@ class PlaybackPanel:
 
     def set_current_frame(self, frame: int) -> None:
         dpg.set_value("playback_scrub", frame)
+
+    def get_use_inprocess_viewer(self) -> bool:
+        return dpg.get_value("inprocess_viewer")

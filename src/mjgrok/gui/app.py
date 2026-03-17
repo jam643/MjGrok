@@ -16,7 +16,7 @@ from mjgrok.scenarios import SCENARIOS
 from mjgrok.scenarios.base import Scenario
 from mjgrok.simulation.runner import SimulationRunner
 from mjgrok.simulation.trajectory import TrajectoryCache
-from mjgrok.viewer.playback import ViewerLauncher
+from mjgrok.viewer.playback import InProcessViewer, ViewerLauncher
 
 _FONTS_DIR = Path(__file__).parent.parent / "assets" / "fonts"
 
@@ -27,7 +27,7 @@ class MjGrokApp:
         self._caches: dict[str, TrajectoryCache] = {}
         self._analytical_labels: set[str] = set()
         self._n_sim_expected: int = 0
-        self._viewer = ViewerLauncher()
+        self._viewer: ViewerLauncher | InProcessViewer = ViewerLauncher()
         self._viewer.set_on_frame(self._on_viewer_frame)
         self._runner = SimulationRunner(
             on_done=self._on_sim_done,
@@ -374,8 +374,22 @@ class MjGrokApp:
         if cache is None:
             dpg.set_value("status_text", "Run a simulation first")
             return
+
+        use_inprocess = self._playback_panel.get_use_inprocess_viewer()
+        new_viewer: ViewerLauncher | InProcessViewer
+        new_viewer = InProcessViewer() if use_inprocess else ViewerLauncher()
+
+        # Close old viewer and swap
+        self._viewer.close()
+        self._viewer = new_viewer
+        self._viewer.set_on_frame(self._on_viewer_frame)
+        # Re-sync frame state
+        self._viewer._n_frames = cache.frame_count()
+        self._viewer._dt = cache.times[1] - cache.times[0] if len(cache.times) >= 2 else 0.002
+
         try:
             self._viewer.load(self._scenario, cache.params, cache)
-            dpg.set_value("status_text", "Viewer opened")
+            mode = "in-process" if use_inprocess else "subprocess"
+            dpg.set_value("status_text", f"Viewer opened ({mode})")
         except Exception as e:
             dpg.set_value("status_text", f"Viewer error: {e}")

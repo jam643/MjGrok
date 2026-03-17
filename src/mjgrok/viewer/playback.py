@@ -6,6 +6,9 @@ Linux: subprocess runs under the current Python executable (no main-thread restr
 IPC:
   .npz  — model XML + qpos/qvel trajectory arrays (written once at launch)
   .json — control file: {"frame": N} (written by GUI on every seek)
+
+InProcessViewer: same interface but runs launch_passive() in a background thread.
+  Works on Linux (no main-thread restriction). Not suitable for macOS.
 """
 
 from __future__ import annotations
@@ -22,6 +25,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+import mujoco
+import mujoco.viewer
 import numpy as np
 
 from mjgrok.scenarios.base import Scenario
@@ -147,3 +152,113 @@ class ViewerLauncher:
 def _write_ctrl(path: str, frame: int) -> None:
     with open(path, "w") as f:
         json.dump({"frame": frame}, f)
+
+
+class InProcessViewer:
+    """MuJoCo passive viewer running in a background thread (same process).
+
+    Works on Linux where launch_passive() has no main-thread restriction.
+    Not suitable for macOS (NSWindow requires the main thread).
+    """
+
+    def __init__(self) -> None:
+        self._viewer_thread: threading.Thread | None = None
+        self._handle: Any = None
+        self._stop_event = threading.Event()
+        self._n_frames: int = 0
+        self._current_frame: int = 0
+        self._dt: float = 0.002
+        self._play_thread: threading.Thread | None = None
+        self._play_stop = threading.Event()
+        self._on_frame: Callable[[int], None] | None = None
+        self.fps: float = 30.0
+
+    def set_on_frame(self, callback: Callable[[int], None]) -> None:
+        self._on_frame = callback
+
+    def load(self, scenario: Scenario, params: dict[str, Any], cache: TrajectoryCache) -> None:
+        """Build model and launch passive viewer in a background thread."""
+        self.close()
+
+        nq = sum(1 for k in cache.series_arr if k.startswith("qpos_"))
+        nv = sum(1 for k in cache.series_arr if k.startswith("qvel_"))
+        qpos = np.column_stack([cache.series_arr[f"qpos_{i}"] for i in range(nq)])
+        qvel = np.column_stack([cache.series_arr[f"qvel_{i}"] for i in range(nv)])
+
+        self._n_frames = cache.frame_count()
+        self._current_frame = 0
+        self._stop_event.clear()
+
+        model = scenario.build_model(params)
+        data = mujoco.MjData(model)
+
+        def _apply_frame(f: int) -> None:
+            data.qpos[:] = qpos[f]
+            data.qvel[:] = qvel[f]
+            mujoco.mj_forward(model, data)
+
+        def _viewer_loop() -> None:
+            _apply_frame(0)
+            with mujoco.viewer.launch_passive(model, data) as handle:
+                self._handle = handle
+                while handle.is_running() and not self._stop_event.is_set():
+                    with handle.lock():
+                        _apply_frame(self._current_frame)
+                    handle.sync()
+                    time.sleep(1.0 / 60.0)
+                self._handle = None
+
+        self._viewer_thread = threading.Thread(target=_viewer_loop, daemon=True)
+        self._viewer_thread.start()
+
+    def close(self) -> None:
+        self.pause()
+        self._stop_event.set()
+        handle = self._handle
+        if handle is not None:
+            with contextlib.suppress(Exception):
+                handle.close()
+        self._handle = None
+        self._n_frames = 0
+        self._current_frame = 0
+
+    def is_running(self) -> bool:
+        return self._viewer_thread is not None and self._viewer_thread.is_alive()
+
+    def seek(self, frame: int) -> None:
+        self._current_frame = max(0, min(frame, self._n_frames - 1))
+
+    def play(self) -> None:
+        if self._play_thread and self._play_thread.is_alive():
+            return
+        self._play_stop.clear()
+
+        def _loop() -> None:
+            interval = 1.0 / self.fps
+            frame_step = max(1, round(interval / self._dt))
+            while not self._play_stop.is_set():
+                if self._current_frame >= self._n_frames - 1:
+                    self._play_stop.set()
+                    break
+                self.seek(self._current_frame + frame_step)
+                if self._on_frame:
+                    self._on_frame(self._current_frame)
+                time.sleep(interval)
+
+        self._play_thread = threading.Thread(target=_loop, daemon=True)
+        self._play_thread.start()
+
+    def pause(self) -> None:
+        self._play_stop.set()
+
+    def step_forward(self) -> int:
+        self.seek(self._current_frame + 1)
+        return self._current_frame
+
+    def step_backward(self) -> int:
+        self.seek(self._current_frame - 1)
+        return self._current_frame
+
+    @property
+    def current_frame(self) -> int:
+        return self._current_frame
