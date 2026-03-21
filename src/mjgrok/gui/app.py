@@ -27,6 +27,7 @@ class MjGrokApp:
         self._caches: dict[str, TrajectoryCache] = {}
         self._analytical_labels: set[str] = set()
         self._n_sim_expected: int = 0
+        self._xml_selected_label: str = ""
         self._viewer: ViewerBase = ViewerLauncher()
         self._viewer.set_on_frame(self._on_viewer_frame)
         self._runner = SimulationRunner(
@@ -138,10 +139,31 @@ class MjGrokApp:
                     dpg.add_progress_bar(tag="progress_bar", default_value=0.0, width=-1)
                     dpg.add_text("Ready", tag="status_text")
 
-                # Right column: plots (scrollable) + playback (fixed footer)
+                # Right column: tab bar (plots + xml) + playback (fixed footer)
                 with dpg.child_window(tag="right_panel", border=False):
-                    with dpg.child_window(tag="plot_container", height=-170, border=False):
-                        pass
+                    with dpg.child_window(tag="tabs_area", height=-170, border=False):  # noqa: SIM117
+                        with dpg.tab_bar(tag="right_tab_bar"):
+                            with dpg.tab(label="Plots", tag="tab_plots"):  # noqa: SIM117
+                                with dpg.child_window(  # noqa: SIM117
+                                    tag="plot_container", height=-1, border=False
+                                ):
+                                    pass
+                            with dpg.tab(label="Model XML", tag="tab_xml"):
+                                dpg.add_combo(
+                                    tag="xml_traj_combo",
+                                    items=[],
+                                    width=-1,
+                                    show=False,
+                                    callback=self._on_xml_traj_changed,
+                                )
+                                with dpg.child_window(tag="xml_scroll", height=-1, border=False):
+                                    dpg.add_input_text(
+                                        tag="xml_text",
+                                        multiline=True,
+                                        readonly=True,
+                                        width=-1,
+                                        height=-1,
+                                    )
                     with dpg.child_window(tag="playback_container", height=-1, border=False):
                         pass
 
@@ -188,6 +210,31 @@ class MjGrokApp:
             dpg.hide_item("lbl_analytical")
             dpg.hide_item("show_analytical")
 
+    def _generate_xml(self, params: dict) -> str:
+        try:
+            return self._scenario.build_model_xml(params)
+        except Exception as e:
+            return f"Error generating XML:\n{e}"
+
+    def _refresh_xml_display(self) -> None:
+        """Update xml_text for the currently selected trajectory. Main thread only."""
+        cache = self._caches.get(self._xml_selected_label) if self._xml_selected_label else None
+        if cache is None:
+            cache = next(iter(self._caches.values()), None)
+        if cache is not None:
+            params = cache.params
+        else:
+            params = (
+                self._param_panel.collect_params()
+                if self._param_panel
+                else self._scenario.default_params()
+            )
+        dpg.set_value("xml_text", self._generate_xml(params))
+
+    def _on_xml_traj_changed(self, sender, app_data, user_data) -> None:
+        self._xml_selected_label = app_data
+        self._refresh_xml_display()
+
     # ── Scenario selection ──────────────────────────────────────────────────
 
     def _on_scenario_changed(self, sender, app_data, user_data) -> None:
@@ -200,6 +247,9 @@ class MjGrokApp:
         self._plot_panel.build(self._scenario)
         self._saveload_panel.refresh(self._scenario.name)
         self._caches = {}
+        self._xml_selected_label = ""
+        dpg.set_value("xml_text", "")
+        dpg.configure_item("xml_traj_combo", items=[], show=False)
         self._refresh_analytical_visibility()
 
     # ── Simulation ──────────────────────────────────────────────────────────
@@ -248,6 +298,16 @@ class MjGrokApp:
         self._plot_panel.prepare_trajectories(all_labels)
         self._playback_panel.set_trajectories(all_labels)
 
+        # Set up XML tab — combo visible only for sweeps (sim labels only, not analytical)
+        self._xml_selected_label = sim_labels[0] if sim_labels else ""
+        dpg.set_value("xml_text", "")
+        if len(sim_labels) > 1:
+            dpg.configure_item(
+                "xml_traj_combo", items=sim_labels, default_value=sim_labels[0], show=True
+            )
+        else:
+            dpg.configure_item("xml_traj_combo", items=[], show=False)
+
         # Populate analytical trajectories immediately (series already created above)
         for a_cache in analytical_caches:
             self._caches[a_cache.label] = a_cache
@@ -292,6 +352,11 @@ class MjGrokApp:
         """Called from simulation thread — only dpg.set_value is safe here."""
         self._caches[cache.label] = cache
         self._plot_panel.update(cache)
+
+        # Update XML display if this is the selected trajectory (or the only one)
+        if not self._xml_selected_label or self._xml_selected_label == cache.label:
+            xml = self._generate_xml(cache.params)
+            dpg.set_value("xml_text", xml)
 
         # Update scrub to the first completed trajectory if none selected yet
         selected = self._playback_panel.get_selected_trajectory()
