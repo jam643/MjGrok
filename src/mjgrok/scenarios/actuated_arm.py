@@ -144,6 +144,22 @@ class ActuatedArmScenario(Scenario):
                 group="Actuator",
             ),
             ParamSpec(
+                "gear_ratio",
+                "Gear Ratio",
+                "float",
+                1.0,
+                min_val=0.1,
+                max_val=20.0,
+                step=0.5,
+                sweepable=True,
+                tooltip=(
+                    "Mechanical gear ratio between actuator and joint. "
+                    "Joint torque = gear × actuator_force; effective kp at joint = gear² × kp. "
+                    "High gear: more torque authority, less speed, more reflected armature inertia."
+                ),
+                group="Actuator",
+            ),
+            ParamSpec(
                 "kp",
                 "kp (position gain)",
                 "float",
@@ -168,6 +184,22 @@ class ActuatedArmScenario(Scenario):
                 group="Actuator",
             ),
             ParamSpec(
+                "max_torque",
+                "Max Torque (N·m)",
+                "float",
+                0.0,
+                min_val=0.0,
+                max_val=50.0,
+                step=0.5,
+                sweepable=True,
+                tooltip=(
+                    "Actuator force limit at the joint (N·m). "
+                    "0 = unlimited. Models real actuator saturation; "
+                    "observe how the arm fails to reach target under gravity load."
+                ),
+                group="Actuator",
+            ),
+            ParamSpec(
                 "target_angle_deg",
                 "Target Angle (deg)",
                 "float",
@@ -175,8 +207,24 @@ class ActuatedArmScenario(Scenario):
                 min_val=-150.0,
                 max_val=150.0,
                 step=5.0,
-                sweepable=False,
+                sweepable=True,
                 tooltip="Step-input target joint angle (0° = hanging down, 90° = horizontal)",
+                group="Actuator",
+            ),
+            ParamSpec(
+                "initial_angle_deg",
+                "Initial Angle (deg)",
+                "float",
+                0.0,
+                min_val=-150.0,
+                max_val=150.0,
+                step=5.0,
+                sweepable=False,
+                tooltip=(
+                    "Starting joint angle before the step command is applied. "
+                    "0° = hanging down. Vary to see how the step response changes "
+                    "with initial condition (gravity nonlinearity, energy)."
+                ),
                 group="Actuator",
             ),
             # Joint Limits
@@ -215,6 +263,22 @@ class ActuatedArmScenario(Scenario):
                 group="Joint Limits",
             ),
             # Simulation
+            ParamSpec(
+                "gravity_scale",
+                "Gravity Scale",
+                "float",
+                1.0,
+                min_val=0.0,
+                max_val=3.0,
+                step=0.05,
+                sweepable=True,
+                tooltip=(
+                    "Multiplier on Earth gravity (9.81 m/s²). "
+                    "0 = zero-g, 0.38 ≈ Mars, 1 = Earth, 2.5 ≈ Jupiter. "
+                    "Shows how gravitational load changes steady-state error and energy."
+                ),
+                group="Simulation",
+            ),
             ParamSpec(
                 "timestep",
                 "Timestep (s)",
@@ -301,14 +365,17 @@ class ActuatedArmScenario(Scenario):
         stiffness = float(params["stiffness"])
         frictionloss = float(params["frictionloss"])
         actuator_type = params["actuator_type"]
+        gear_ratio = float(params["gear_ratio"])
         kp = float(params["kp"])
         kv = float(params["kv"])
+        max_torque = float(params["max_torque"])
+        gravity_scale = float(params["gravity_scale"])
         use_limits = params["use_limits"] == "on"
-        limit_range_rad = math.radians(float(params["limit_range_deg"]))
-        limit_margin_rad = math.radians(float(params["limit_margin_deg"]))
+        limit_range_deg = float(params["limit_range_deg"])
+        limit_margin_deg = float(params["limit_margin_deg"])
 
         spec = mujoco.MjSpec()
-        spec.option.gravity = [0.0, 0.0, -9.81]
+        spec.option.gravity = [0.0, 0.0, -9.81 * gravity_scale]
         spec.option.timestep = float(params["timestep"])
         spec.option.integrator = _INTEGRATOR_MAP[params["integrator"]]
 
@@ -329,8 +396,9 @@ class ActuatedArmScenario(Scenario):
         hinge.frictionloss = frictionloss
         if use_limits:
             hinge.limited = True
-            hinge.range = [-limit_range_rad, limit_range_rad]
-            hinge.margin = limit_margin_rad
+            # MjSpec follows XML convention: hinge range/margin are in degrees
+            hinge.range = [-limit_range_deg, limit_range_deg]
+            hinge.margin = limit_margin_deg
 
         # Capsule link: hangs downward at q=0
         # Center at [0, 0, -L/2], size=[radius, half_length]
@@ -359,6 +427,11 @@ class ActuatedArmScenario(Scenario):
         act.name = "arm_actuator"
         act.target = "hinge"
         act.trntype = mujoco.mjtTrn.mjTRN_JOINT
+        act.gear = np.array([gear_ratio, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+        if max_torque > 0.0:
+            act.forcelimited = True
+            act.forcerange = np.array([-max_torque, max_torque])
 
         if actuator_type == "position":
             act.gaintype = mujoco.mjtGain.mjGAIN_FIXED
@@ -383,21 +456,32 @@ class ActuatedArmScenario(Scenario):
         self._m_eff = m_eff
         self._L_eff = L_eff
         self._I_eff = I_eff
+        self._gravity_scale = gravity_scale
         self._target_angle_rad = math.radians(float(params["target_angle_deg"]))
 
         return spec
+
+    def setup_data(
+        self, model: mujoco.MjModel, data: mujoco.MjData, params: dict[str, Any]
+    ) -> None:
+        initial_rad = math.radians(float(params["initial_angle_deg"]))
+        joint_id = model.joint("hinge").id
+        data.qpos[model.jnt_qposadr[joint_id]] = initial_rad
 
     def apply_ctrl(
         self, model: mujoco.MjModel, data: mujoco.MjData, params: dict[str, Any]
     ) -> None:
         actuator_type = params["actuator_type"]
+        gear_ratio = float(params["gear_ratio"])
         target_rad = math.radians(float(params["target_angle_deg"]))
 
         if actuator_type == "position":
-            data.ctrl[0] = target_rad
+            # ctrl is in actuator space; for joint transmission with gear G,
+            # the position error is (ctrl - G*q), so ctrl = G*target to reach target.
+            data.ctrl[0] = gear_ratio * target_rad
         elif actuator_type == "velocity":
             data.ctrl[0] = 0.0
-        else:  # motor: manual PD
+        else:  # motor: manual PD, ctrl is the raw torque (gear scales it at joint)
             kp = float(params["kp"])
             kv = float(params["kv"])
             joint_id = model.joint("hinge").id
@@ -417,10 +501,12 @@ class ActuatedArmScenario(Scenario):
 
         angle_deg = math.degrees(q)
         velocity_degs = math.degrees(qdot)
-        ctrl_torque = float(data.actuator_force[0])
-        gravity_torque = -self._m_eff * 9.81 * self._L_eff * math.sin(q)
+        # qfrc_actuator is already in joint-space (gear-scaled); use it for the torque plot.
+        ctrl_torque = float(data.qfrc_actuator[0])
+        g = 9.81 * self._gravity_scale
+        gravity_torque = -self._m_eff * g * self._L_eff * math.sin(q)
         ke = 0.5 * self._I_eff * qdot**2
-        pe = self._m_eff * 9.81 * self._L_eff * (1.0 - math.cos(q))
+        pe = self._m_eff * g * self._L_eff * (1.0 - math.cos(q))
         total_energy = ke + pe
 
         return {

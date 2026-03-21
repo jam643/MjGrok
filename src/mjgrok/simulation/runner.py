@@ -87,6 +87,8 @@ class SimulationRunner:
             try:
                 model = scenario.build_model(params)
                 data = mujoco.MjData(model)
+                scenario.setup_data(model, data, params)
+                mujoco.mj_forward(model, data)
                 cache = TrajectoryCache(params=dict(params), label=label)
 
                 t0 = time.perf_counter()

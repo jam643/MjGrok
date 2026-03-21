@@ -78,6 +78,11 @@ class Scenario(ABC):
     ) -> None:
         """Set data.ctrl each step before mj_step. Default: no-op."""
 
+    def setup_data(  # noqa: B027
+        self, model: mujoco.MjModel, data: mujoco.MjData, params: dict[str, Any]
+    ) -> None:
+        """Called once after MjData creation to set initial conditions. Default: no-op."""
+
     def default_params(self) -> dict[str, Any]:
         return {spec.name: spec.default for spec in self.param_specs()}
 
