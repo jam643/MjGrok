@@ -16,7 +16,7 @@ from mjgrok.scenarios import SCENARIOS
 from mjgrok.scenarios.base import Scenario
 from mjgrok.simulation.runner import SimulationRunner
 from mjgrok.simulation.trajectory import TrajectoryCache
-from mjgrok.viewer.playback import InProcessViewer, ViewerLauncher
+from mjgrok.viewer.playback import InProcessViewer, ViewerBase, ViewerLauncher
 
 _FONTS_DIR = Path(__file__).parent.parent / "assets" / "fonts"
 
@@ -27,7 +27,7 @@ class MjGrokApp:
         self._caches: dict[str, TrajectoryCache] = {}
         self._analytical_labels: set[str] = set()
         self._n_sim_expected: int = 0
-        self._viewer: ViewerLauncher | InProcessViewer = ViewerLauncher()
+        self._viewer: ViewerBase = ViewerLauncher()
         self._viewer.set_on_frame(self._on_viewer_frame)
         self._runner = SimulationRunner(
             on_done=self._on_sim_done,
@@ -297,18 +297,14 @@ class MjGrokApp:
         selected = self._playback_panel.get_selected_trajectory()
         if not selected or selected == cache.label:
             n = cache.frame_count()
-            # Hot-reload InProcessViewer (updates _n_frames/_dt internally under lock)
-            reloaded = (
-                isinstance(self._viewer, InProcessViewer)
-                and self._viewer.reload_trajectory(self._scenario, cache.params, cache)
-            )
+            # Hot-reload InProcessViewer (updates n_frames/dt internally under lock)
+            reloaded = self._viewer.reload_trajectory(self._scenario, cache.params, cache)
             if reloaded:
                 self._playback_panel.update_frame_count(n)
             else:
+                dt = cache.times[1] - cache.times[0] if len(cache.times) >= 2 else 0.002
+                self._viewer.configure(n, dt)
                 self._playback_panel.set_frame_count(n)
-                self._viewer._n_frames = n
-                if len(cache.times) >= 2:
-                    self._viewer._dt = cache.times[1] - cache.times[0]
 
         # Count only simulation completions (analytical caches are pre-populated)
         n_sim_done = sum(1 for lbl in self._caches if lbl not in self._analytical_labels)
@@ -343,11 +339,11 @@ class MjGrokApp:
         cache = self._caches.get(label)
         if cache and self._playback_panel:
             n = cache.frame_count()
+            dt = cache.times[1] - cache.times[0] if len(cache.times) >= 2 else 0.002
+            reloaded = self._viewer.reload_trajectory(self._scenario, cache.params, cache)
+            if not reloaded:
+                self._viewer.configure(n, dt)
             self._playback_panel.set_frame_count(n)
-            self._viewer._n_frames = n
-            self._viewer._current_frame = 0
-            if len(cache.times) >= 2:
-                self._viewer._dt = cache.times[1] - cache.times[0]
 
     def _on_seek(self, frame: int) -> None:
         self._viewer.seek(frame)
@@ -384,16 +380,15 @@ class MjGrokApp:
             return
 
         use_inprocess = self._playback_panel.get_use_inprocess_viewer()
-        new_viewer: ViewerLauncher | InProcessViewer
-        new_viewer = InProcessViewer() if use_inprocess else ViewerLauncher()
+        new_viewer: ViewerBase = InProcessViewer() if use_inprocess else ViewerLauncher()
 
         # Close old viewer and swap
         self._viewer.close()
         self._viewer = new_viewer
         self._viewer.set_on_frame(self._on_viewer_frame)
-        # Re-sync frame state
-        self._viewer._n_frames = cache.frame_count()
-        self._viewer._dt = cache.times[1] - cache.times[0] if len(cache.times) >= 2 else 0.002
+        # Re-sync frame state via public API
+        dt = cache.times[1] - cache.times[0] if len(cache.times) >= 2 else 0.002
+        self._viewer.configure(cache.frame_count(), dt)
 
         try:
             self._viewer.load(self._scenario, cache.params, cache)

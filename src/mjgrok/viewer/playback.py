@@ -22,6 +22,7 @@ import sys
 import tempfile
 import threading
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
@@ -33,7 +34,50 @@ from mjgrok.scenarios.base import Scenario
 from mjgrok.simulation.trajectory import TrajectoryCache
 
 
-class ViewerLauncher:
+class ViewerBase(ABC):
+    """Shared interface for all viewer implementations."""
+
+    @abstractmethod
+    def set_on_frame(self, callback: Callable[[int], None]) -> None: ...
+
+    @abstractmethod
+    def load(self, scenario: Scenario, params: dict[str, Any], cache: TrajectoryCache) -> None: ...
+
+    @abstractmethod
+    def reload_trajectory(
+        self, scenario: Scenario, params: dict[str, Any], cache: TrajectoryCache
+    ) -> bool: ...
+
+    @abstractmethod
+    def configure(self, n_frames: int, dt: float) -> None: ...
+
+    @abstractmethod
+    def seek(self, frame: int) -> None: ...
+
+    @abstractmethod
+    def play(self) -> None: ...
+
+    @abstractmethod
+    def pause(self) -> None: ...
+
+    @abstractmethod
+    def step_forward(self) -> int: ...
+
+    @abstractmethod
+    def step_backward(self) -> int: ...
+
+    @abstractmethod
+    def close(self) -> None: ...
+
+    @abstractmethod
+    def is_running(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def current_frame(self) -> int: ...
+
+
+class ViewerLauncher(ViewerBase):
     def __init__(self) -> None:
         self._proc: subprocess.Popen | None = None
         self._ctrl_path: str | None = None
@@ -114,6 +158,17 @@ class ViewerLauncher:
 
         self._proc = subprocess.Popen(cmd)
 
+    def reload_trajectory(
+        self, scenario: Scenario, params: dict[str, Any], cache: TrajectoryCache
+    ) -> bool:
+        """Subprocess viewer cannot hot-reload; requires full reopen via load()."""
+        return False
+
+    def configure(self, n_frames: int, dt: float) -> None:
+        self._n_frames = n_frames
+        self._dt = dt
+        self._current_frame = 0
+
     def close(self) -> None:
         self.pause()
         if self._proc is not None:
@@ -175,7 +230,7 @@ def _copy_model_arrays(dest: mujoco.MjModel, src: mujoco.MjModel) -> None:
             pass
 
 
-class InProcessViewer:
+class InProcessViewer(ViewerBase):
     """MuJoCo passive viewer running in a background thread (same process).
 
     Works on Linux where launch_passive() has no main-thread restriction.
@@ -278,6 +333,12 @@ class InProcessViewer:
             self._current_frame = min(self._current_frame, self._n_frames - 1)
             self._dt = cache.times[1] - cache.times[0] if len(cache.times) >= 2 else 0.002
         return True
+
+    def configure(self, n_frames: int, dt: float) -> None:
+        with self._traj_lock:
+            self._n_frames = n_frames
+            self._dt = dt
+            self._current_frame = 0
 
     def close(self) -> None:
         self.pause()

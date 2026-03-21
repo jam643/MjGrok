@@ -47,7 +47,3 @@ class TrajectoryCache:
 
     def frame_count(self) -> int:
         return len(self.times)
-
-    def get_frame_state(self, frame_idx: int) -> dict[str, float]:
-        """Return all series values at a given frame index."""
-        return {k: v[frame_idx] for k, v in self.series.items()}

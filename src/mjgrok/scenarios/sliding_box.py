@@ -226,7 +226,7 @@ class SlidingBoxScenario(Scenario):
 
         # ── Solver options ────────────────────────────────────────────────────
         spec.option.timestep = float(params["timestep"])
-        spec.option.gravity = [0.0, 0.0, -10.0]
+        spec.option.gravity = [0.0, 0.0, -10.0]  # simplified gravity for clean Coulomb friction demo
         _integrator_map = {
             "Euler": mujoco.mjtIntegrator.mjINT_EULER,
             "RK4": mujoco.mjtIntegrator.mjINT_RK4,
