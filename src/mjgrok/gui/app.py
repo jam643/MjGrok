@@ -16,6 +16,7 @@ from mjgrok.scenarios import SCENARIOS
 from mjgrok.scenarios.base import Scenario
 from mjgrok.simulation.runner import SimulationRunner
 from mjgrok.simulation.trajectory import TrajectoryCache
+from mjgrok.viewer.embedded_renderer import EmbeddedRenderer
 from mjgrok.viewer.playback import InProcessViewer, ViewerBase, ViewerLauncher
 
 _FONTS_DIR = Path(__file__).parent.parent / "assets" / "fonts"
@@ -36,6 +37,8 @@ class MjGrokApp:
             on_progress=self._on_sim_progress,
         )
 
+        self._embedded: EmbeddedRenderer | None = None
+
         self._param_panel: ParamPanel | None = None
         self._plot_panel: PlotPanel | None = None
         self._playback_panel: PlaybackPanel | None = None
@@ -52,11 +55,16 @@ class MjGrokApp:
         dpg.maximize_viewport()
         dpg.show_viewport()
         self._on_run_clicked()
-        dpg.start_dearpygui()
+        while dpg.is_dearpygui_running():
+            if self._embedded:
+                self._embedded.flush_to_dpg()
+            dpg.render_dearpygui_frame()
         dpg.destroy_context()
 
         self._runner.cancel()
         self._viewer.close()
+        if self._embedded:
+            self._embedded.close()
 
     def _setup_fonts(self) -> None:
         self._font_header: int | None = None
@@ -70,12 +78,15 @@ class MjGrokApp:
             self._font_header = dpg.add_font(str(header_src), 24)
 
     def _build_ui(self) -> None:
+        self._embedded = EmbeddedRenderer("embed_tex")
+        self._embedded.register_texture()
+
         with dpg.window(tag="main_window", label="MjGrok", no_title_bar=True):
             dpg.set_primary_window("main_window", True)
 
             with dpg.group(horizontal=True):
                 # Left column: scenario picker + params + run controls
-                with dpg.child_window(tag="left_panel", width=640, height=-1):
+                with dpg.child_window(tag="left_panel", width=520, height=-1):
                     dpg.add_text("Scenario", tag="lbl_scenario")
                     dpg.add_combo(
                         tag="scenario_picker",
@@ -139,8 +150,8 @@ class MjGrokApp:
                     dpg.add_progress_bar(tag="progress_bar", default_value=0.0, width=-1)
                     dpg.add_text("Ready", tag="status_text")
 
-                # Right column: tab bar (plots + xml) + playback (fixed footer)
-                with dpg.child_window(tag="right_panel", border=False):
+                # Right side: plots panel + embedded preview panel side by side
+                with dpg.child_window(tag="plots_panel", width=1100, border=False):
                     with dpg.child_window(tag="tabs_area", height=-170, border=False):  # noqa: SIM117
                         with dpg.tab_bar(tag="right_tab_bar"):
                             with dpg.tab(label="Plots", tag="tab_plots"):  # noqa: SIM117
@@ -166,6 +177,14 @@ class MjGrokApp:
                                     )
                     with dpg.child_window(tag="playback_container", height=-1, border=False):
                         pass
+
+                with dpg.child_window(tag="preview_panel", border=False):
+                    dpg.add_text("Simulation Preview")
+                    dpg.add_image(
+                        "embed_tex",
+                        width=EmbeddedRenderer.RENDER_W,
+                        height=EmbeddedRenderer.RENDER_H,
+                    )
 
         self._param_panel = ParamPanel("param_container", on_change=self._on_param_changed)
         self._param_panel.build(self._scenario)
@@ -242,6 +261,8 @@ class MjGrokApp:
             if s.name == app_data:
                 self._scenario = s
                 break
+        if self._embedded:
+            self._embedded.pause()
         dpg.set_value("scenario_desc", self._scenario.description)
         self._param_panel.build(self._scenario)
         self._plot_panel.build(self._scenario)
@@ -251,6 +272,7 @@ class MjGrokApp:
         dpg.set_value("xml_text", "")
         dpg.configure_item("xml_traj_combo", items=[], show=False)
         self._refresh_analytical_visibility()
+        self._on_run_clicked()
 
     # ── Simulation ──────────────────────────────────────────────────────────
 
@@ -369,7 +391,9 @@ class MjGrokApp:
             else:
                 dt = cache.times[1] - cache.times[0] if len(cache.times) >= 2 else 0.002
                 self._viewer.configure(n, dt)
-                self._playback_panel.set_frame_count(n)
+                self._playback_panel.update_frame_count(n)
+            if self._embedded:
+                self._embedded.load_trajectory(self._scenario, cache.params, cache)
 
         # Count only simulation completions (analytical caches are pre-populated)
         n_sim_done = sum(1 for lbl in self._caches if lbl not in self._analytical_labels)
@@ -409,15 +433,23 @@ class MjGrokApp:
             if not reloaded:
                 self._viewer.configure(n, dt)
             self._playback_panel.set_frame_count(n)
+            if self._embedded:
+                self._embedded.load_trajectory(self._scenario, cache.params, cache)
 
     def _on_seek(self, frame: int) -> None:
         self._viewer.seek(frame)
+        if self._embedded:
+            self._embedded.seek(frame)
 
     def _on_play(self) -> None:
         self._viewer.play()
+        if self._embedded:
+            self._embedded.play()
 
     def _on_pause(self) -> None:
         self._viewer.pause()
+        if self._embedded:
+            self._embedded.pause()
 
     def _on_viewer_frame(self, frame: int) -> None:
         """Called from play thread — only dpg.set_value is safe here."""
@@ -426,11 +458,15 @@ class MjGrokApp:
 
     def _on_step_forward(self) -> None:
         frame = self._viewer.step_forward()
+        if self._embedded:
+            self._embedded.step_forward()
         if self._playback_panel:
             self._playback_panel.set_current_frame(frame)
 
     def _on_step_backward(self) -> None:
         frame = self._viewer.step_backward()
+        if self._embedded:
+            self._embedded.step_backward()
         if self._playback_panel:
             self._playback_panel.set_current_frame(frame)
 
