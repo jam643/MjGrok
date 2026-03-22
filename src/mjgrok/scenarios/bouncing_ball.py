@@ -36,7 +36,7 @@ _CONE_MAP = {
 class BouncingBallScenario(Scenario):
     name = "Bouncing Ball"
     description = (
-        "A sphere dropped from height onto a rigid floor under 10 m/s² gravity. "
+        "A sphere dropped from height onto a rigid floor under 10 m/s^2 gravity. "
         "Explore how solimp/solref tune the effective restitution, energy loss per bounce, "
         "and contact penetration depth."
     )
@@ -95,7 +95,7 @@ class BouncingBallScenario(Scenario):
                 max_val=0.02,
                 step=0.0001,
                 sweepable=True,
-                tooltip="Simulation timestep — smaller values increase accuracy at impact",
+                tooltip="Simulation timestep - smaller values increase accuracy at impact",
                 group="Simulation",
             ),
             ParamSpec(
@@ -203,8 +203,8 @@ class BouncingBallScenario(Scenario):
                 sweepable=True,
                 tooltip=(
                     "Constraint reference time constant (s): controls contact spring stiffness. "
-                    "Smaller → stiffer spring → higher restitution. "
-                    "Must be > 2× timestep to remain stable."
+                    "Smaller = stiffer spring = higher restitution. "
+                    "Must be > 2x timestep to remain stable."
                 ),
                 group="Contact Solver",
             ),

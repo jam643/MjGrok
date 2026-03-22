@@ -87,6 +87,18 @@ class Scenario(ABC):
 
 Sweepable params show a checkbox in the param panel. When checked, the slider is replaced by Min / Max / N inputs. `ParamPanel.get_sweep_configs()` returns the configured ranges. The runner will execute N sequential simulations and the plot panel will overlay all resulting trajectories. A dropdown in the playback panel selects which sweep trajectory to view.
 
+## MuJoCo Documentation
+
+Always look up the latest MuJoCo docs when working on physics parameters, XML models, or solver behavior. Key references:
+
+- **Overview & concepts**: https://mujoco.readthedocs.io/en/stable/overview.html
+- **XML reference** (bodies, joints, geoms, contacts, actuators): https://mujoco.readthedocs.io/en/stable/XMLreference.html
+- **Computation** (solver, constraints, contacts, friction): https://mujoco.readthedocs.io/en/stable/computation/index.html
+- **Python bindings**: https://mujoco.readthedocs.io/en/stable/python.html
+- **MjModel / MjData fields**: https://mujoco.readthedocs.io/en/stable/APIreference/APItypes.html
+
+When implementing or tuning physics parameters, fetch the relevant docs page to confirm field names, units, and semantics before writing code.
+
 ## Workflow
 
 - Use ruff for linting and formatting

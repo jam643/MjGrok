@@ -3,16 +3,18 @@
 from mjgrok.scenarios.actuated_arm import ActuatedArmScenario
 from mjgrok.scenarios.base import ParamSpec, PlotSpec, Scenario
 from mjgrok.scenarios.bouncing_ball import BouncingBallScenario
+from mjgrok.scenarios.double_pendulum import DoublePendulumScenario
 from mjgrok.scenarios.parallel_jaw_grasp import ParallelJawGraspScenario
 from mjgrok.scenarios.penetrating_sphere import PenetratingSphereScenario
 from mjgrok.scenarios.sliding_box import SlidingBoxScenario
 
 SCENARIOS: list[Scenario] = [
+    ParallelJawGraspScenario(),
     SlidingBoxScenario(),
     PenetratingSphereScenario(),
     BouncingBallScenario(),
-    ParallelJawGraspScenario(),
     ActuatedArmScenario(),
+    DoublePendulumScenario(),
 ]
 
 # Keyed by Scenario.name — used by viewer worker to reconstruct model in subprocess
@@ -24,6 +26,7 @@ __all__ = [
     "Scenario",
     "ActuatedArmScenario",
     "BouncingBallScenario",
+    "DoublePendulumScenario",
     "ParallelJawGraspScenario",
     "PenetratingSphereScenario",
     "SlidingBoxScenario",

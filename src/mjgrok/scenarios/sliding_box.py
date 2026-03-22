@@ -15,7 +15,7 @@ class SlidingBoxScenario(Scenario):
     name = "Sliding Box"
     description = (
         "Box on a flat floor under constant external force. "
-        "Gravity = 10 m/s². Explore box geometry, mass, friction, and solver parameters."
+        "Gravity = 10 m/s^2. Explore box geometry, mass, friction, and solver parameters."
     )
 
     def param_specs(self) -> list[ParamSpec]:
@@ -55,7 +55,7 @@ class SlidingBoxScenario(Scenario):
             ),
             ParamSpec(
                 "force_x_normalized",
-                "Horizontal Force (× mg)",
+                "Horizontal Force (x mg)",
                 "float",
                 0.5,
                 min_val=-3.0,

@@ -237,7 +237,7 @@ class ParallelJawGraspScenario(Scenario):
                 max_val=0.9,
                 step=0.05,
                 sweepable=True,
-                tooltip="Constraint impedance: midpoint of transition (0–1)",
+                tooltip="Constraint impedance: midpoint of transition (0-1)",
                 group="Contact Solver",
             ),
             ParamSpec(

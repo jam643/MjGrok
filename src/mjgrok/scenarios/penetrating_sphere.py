@@ -36,7 +36,7 @@ class PenetratingSphereScenario(Scenario):
             ),
             ParamSpec(
                 "penetration_depth",
-                "Penetration Depth (× radius)",
+                "Penetration Depth (x radius)",
                 "float",
                 1.0,
                 min_val=0.0,

@@ -89,7 +89,7 @@ class ActuatedArmScenario(Scenario):
                 max_val=5.0,
                 step=0.05,
                 sweepable=True,
-                tooltip="Joint viscous damping coefficient (N·m·s/rad)",
+                tooltip="Joint viscous damping coefficient (N*m*s/rad)",
                 group="Joint Dynamics",
             ),
             ParamSpec(
@@ -101,7 +101,7 @@ class ActuatedArmScenario(Scenario):
                 max_val=0.2,
                 step=0.005,
                 sweepable=True,
-                tooltip="Rotor inertia added to joint (kg·m²)",
+                tooltip="Rotor inertia added to joint (kg*m^2)",
                 group="Joint Dynamics",
             ),
             ParamSpec(
@@ -113,7 +113,7 @@ class ActuatedArmScenario(Scenario):
                 max_val=10.0,
                 step=0.1,
                 sweepable=True,
-                tooltip="Joint spring stiffness (N·m/rad) — restores to q=0",
+                tooltip="Joint spring stiffness (N*m/rad) - restores to q=0",
                 group="Joint Dynamics",
             ),
             ParamSpec(
@@ -125,7 +125,7 @@ class ActuatedArmScenario(Scenario):
                 max_val=1.0,
                 step=0.05,
                 sweepable=True,
-                tooltip="Dry friction torque (N·m) opposing joint motion",
+                tooltip="Dry friction torque (N*m) opposing joint motion",
                 group="Joint Dynamics",
             ),
             # Actuator
@@ -154,7 +154,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=True,
                 tooltip=(
                     "Mechanical gear ratio between actuator and joint. "
-                    "Joint torque = gear × actuator_force; effective kp at joint = gear² × kp. "
+                    "Joint torque = gear * actuator_force; effective kp at joint = gear^2 * kp. "
                     "High gear: more torque authority, less speed, more reflected armature inertia."
                 ),
                 group="Actuator",
@@ -185,7 +185,7 @@ class ActuatedArmScenario(Scenario):
             ),
             ParamSpec(
                 "max_torque",
-                "Max Torque (N·m)",
+                "Max Torque (N*m)",
                 "float",
                 0.0,
                 min_val=0.0,
@@ -193,7 +193,7 @@ class ActuatedArmScenario(Scenario):
                 step=0.5,
                 sweepable=True,
                 tooltip=(
-                    "Actuator force limit at the joint (N·m). "
+                    "Actuator force limit at the joint (N*m). "
                     "0 = unlimited. Models real actuator saturation; "
                     "observe how the arm fails to reach target under gravity load."
                 ),
@@ -208,7 +208,7 @@ class ActuatedArmScenario(Scenario):
                 max_val=150.0,
                 step=5.0,
                 sweepable=True,
-                tooltip="Step-input target joint angle (0° = hanging down, 90° = horizontal)",
+                tooltip="Step-input target joint angle (0 deg = hanging down, 90 deg = horizontal)",
                 group="Actuator",
             ),
             ParamSpec(
@@ -222,7 +222,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=False,
                 tooltip=(
                     "Starting joint angle before the step command is applied. "
-                    "0° = hanging down. Vary to see how the step response changes "
+                    "0 deg = hanging down. Vary to see how the step response changes "
                     "with initial condition (gravity nonlinearity, energy)."
                 ),
                 group="Actuator",
@@ -273,8 +273,8 @@ class ActuatedArmScenario(Scenario):
                 step=0.05,
                 sweepable=True,
                 tooltip=(
-                    "Multiplier on Earth gravity (9.81 m/s²). "
-                    "0 = zero-g, 0.38 ≈ Mars, 1 = Earth, 2.5 ≈ Jupiter. "
+                    "Multiplier on Earth gravity (9.81 m/s^2). "
+                    "0 = zero-g, 0.38 ~ Mars, 1 = Earth, 2.5 ~ Jupiter. "
                     "Shows how gravitational load changes steady-state error and energy."
                 ),
                 group="Simulation",
@@ -325,7 +325,7 @@ class ActuatedArmScenario(Scenario):
                 "ctrl_torque",
                 "Actuator Torque",
                 "time (s)",
-                "Torque (N·m)",
+                "Torque (N*m)",
                 ["ctrl_torque"],
                 group="Control",
             ),
@@ -333,7 +333,7 @@ class ActuatedArmScenario(Scenario):
                 "torque_components",
                 "Torque Components",
                 "time (s)",
-                "Torque (N·m)",
+                "Torque (N*m)",
                 ["gravity_torque", "ctrl_torque"],
                 group="Control",
             ),

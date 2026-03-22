@@ -105,9 +105,9 @@ class ViewerLauncher(ViewerBase):
             frame_step = max(1, round(interval / self._dt))
             while not self._play_stop.is_set():
                 if self._current_frame >= self._n_frames - 1:
-                    self._play_stop.set()
-                    break
-                self.seek(self._current_frame + frame_step)
+                    self.seek(0)
+                else:
+                    self.seek(self._current_frame + frame_step)
                 if self._on_frame:
                     self._on_frame(self._current_frame)
                 time.sleep(interval)
@@ -373,13 +373,12 @@ class InProcessViewer(ViewerBase):
             while not self._play_stop.is_set():
                 with self._traj_lock:
                     frame_step = max(1, round(interval / self._dt))
-                    at_end = self._current_frame >= self._n_frames - 1
-                    if at_end:
-                        self._play_stop.set()
-                        break
-                    self._current_frame = min(
-                        self._current_frame + frame_step, self._n_frames - 1
-                    )
+                    if self._current_frame >= self._n_frames - 1:
+                        self._current_frame = 0
+                    else:
+                        self._current_frame = min(
+                            self._current_frame + frame_step, self._n_frames - 1
+                        )
                     current = self._current_frame
                 if self._on_frame:
                     self._on_frame(current)

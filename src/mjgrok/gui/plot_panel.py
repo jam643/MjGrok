@@ -23,14 +23,22 @@ _PALETTE: list[tuple[int, int, int, int]] = [
 ]
 
 
-def _get_series_theme(traj_idx: int) -> int:
-    """Return (creating if needed) a reusable theme tag for a given trajectory index."""
-    theme_tag = f"__plot_series_theme_{traj_idx}"
+# Line weights cycle across keys so multi-key plots are distinguishable even at same color.
+_WEIGHTS: list[float] = [1.5, 3.0, 5.0]
+
+
+def _get_series_theme(color_idx: int, weight_idx: int = 0) -> int:
+    """Return (creating if needed) a reusable theme for a (color, weight) pair."""
+    theme_tag = f"__plot_series_theme_{color_idx}_{weight_idx}"
     if dpg.does_item_exist(theme_tag):
         return dpg.get_item_alias(theme_tag)
-    color = _PALETTE[traj_idx % len(_PALETTE)]
+    color = _PALETTE[color_idx % len(_PALETTE)]
+    weight = _WEIGHTS[weight_idx % len(_WEIGHTS)]
     with dpg.theme(tag=theme_tag), dpg.theme_component(dpg.mvLineSeries):
         dpg.add_theme_color(dpg.mvPlotCol_Line, color, category=dpg.mvThemeCat_Plots)
+        dpg.add_theme_style(
+            dpg.mvPlotStyleVar_LineWeight, weight, category=dpg.mvThemeCat_Plots
+        )
     return dpg.get_item_alias(theme_tag)
 
 
@@ -109,20 +117,12 @@ class PlotPanel:
 
         for spec in self._specs:
             y_axis_tag = f"yaxis_{spec.plot_id}"
-            multi_key = len(spec.series_keys) > 1
 
-            for traj_idx, label in enumerate(labels):
-                display_label = label if label else "MuJoCo rollout"
-                for key in spec.series_keys:
-                    series_tag = f"series_{spec.plot_id}_{traj_idx}_{key}"
-                    if multi_traj and multi_key:
-                        legend_label = f"{display_label} ({key})"
-                    elif multi_traj:
-                        legend_label = display_label
-                    elif multi_key:
-                        legend_label = f"MuJoCo rollout ({key})"
-                    else:
-                        legend_label = "MuJoCo rollout"
+            if spec.mode == "phase_portrait":
+                for traj_idx, label in enumerate(labels):
+                    display_label = label if label else "MuJoCo rollout"
+                    legend_label = display_label if multi_traj else "MuJoCo rollout"
+                    series_tag = f"series_{spec.plot_id}_{traj_idx}_phase"
                     dpg.add_line_series(
                         x=[],
                         y=[],
@@ -132,6 +132,35 @@ class PlotPanel:
                     )
                     dpg.bind_item_theme(series_tag, _get_series_theme(traj_idx))
                     self._series_tags.append(series_tag)
+            else:
+                multi_key = len(spec.series_keys) > 1
+                for traj_idx, label in enumerate(labels):
+                    display_label = label if label else "MuJoCo rollout"
+                    for key_idx, key in enumerate(spec.series_keys):
+                        series_tag = f"series_{spec.plot_id}_{traj_idx}_{key}"
+                        if multi_traj and multi_key:
+                            legend_label = f"{display_label} ({key})"
+                        elif multi_traj:
+                            legend_label = display_label
+                        elif multi_key:
+                            legend_label = f"MuJoCo rollout ({key})"
+                        else:
+                            legend_label = "MuJoCo rollout"
+                        dpg.add_line_series(
+                            x=[],
+                            y=[],
+                            label=legend_label,
+                            tag=series_tag,
+                            parent=y_axis_tag,
+                        )
+                        # Single traj: color by key so each series is distinct.
+                        # Multi traj: color by traj, weight by key so both dimensions show.
+                        color_idx = key_idx if not multi_traj else traj_idx
+                        weight_idx = 0 if not multi_traj else key_idx
+                        dpg.bind_item_theme(
+                            series_tag, _get_series_theme(color_idx, weight_idx)
+                        )
+                        self._series_tags.append(series_tag)
 
     def update(self, cache: TrajectoryCache) -> None:
         """Update series for one trajectory. Safe to call from background threads."""
@@ -141,10 +170,18 @@ class PlotPanel:
         times = list(cache.times_arr)
 
         for spec in self._specs:
-            for key in spec.series_keys:
-                series_tag = f"series_{spec.plot_id}_{traj_idx}_{key}"
-                if key in cache.series_arr and dpg.does_item_exist(series_tag):
-                    dpg.set_value(series_tag, [times, list(cache.series_arr[key])])
+            if spec.mode == "phase_portrait":
+                xkey, ykey = spec.series_keys[0], spec.series_keys[1]
+                series_tag = f"series_{spec.plot_id}_{traj_idx}_phase"
+                if (xkey in cache.series_arr and ykey in cache.series_arr
+                        and dpg.does_item_exist(series_tag)):
+                    dpg.set_value(series_tag, [list(cache.series_arr[xkey]),
+                                               list(cache.series_arr[ykey])])
+            else:
+                for key in spec.series_keys:
+                    series_tag = f"series_{spec.plot_id}_{traj_idx}_{key}"
+                    if key in cache.series_arr and dpg.does_item_exist(series_tag):
+                        dpg.set_value(series_tag, [times, list(cache.series_arr[key])])
             if dpg.get_value("plot_autoresize"):
                 dpg.fit_axis_data(f"xaxis_{spec.plot_id}")
                 dpg.fit_axis_data(f"yaxis_{spec.plot_id}")

@@ -35,6 +35,7 @@ class PlotSpec:
     y_label: str
     series_keys: list[str]  # keys into TrajectoryCache.series
     group: str = ""  # collapsible section label; empty = ungrouped (shown at top)
+    mode: Literal["time_series", "phase_portrait"] = "time_series"
 
 
 class Scenario(ABC):
