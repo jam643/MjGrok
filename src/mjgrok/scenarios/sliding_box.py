@@ -10,6 +10,8 @@ import numpy as np
 from mjgrok.scenarios.base import ParamSpec, PlotSpec, Scenario
 from mjgrok.simulation.trajectory import TrajectoryCache
 
+_DOCS = "https://mujoco.readthedocs.io/en/stable/XMLreference.html"
+
 
 class SlidingBoxScenario(Scenario):
     name = "Sliding Box"
@@ -74,6 +76,7 @@ class SlidingBoxScenario(Scenario):
                 step=0.01,
                 tooltip="Sliding friction coefficient (MuJoCo friction[0])",
                 group="Friction",
+                doc_url=f"{_DOCS}#body-geom-friction",
             ),
             ParamSpec(
                 "timestep",
@@ -85,6 +88,7 @@ class SlidingBoxScenario(Scenario):
                 step=0.0001,
                 tooltip="Simulation timestep",
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-timestep",
             ),
             ParamSpec(
                 "integrator",
@@ -95,6 +99,7 @@ class SlidingBoxScenario(Scenario):
                 sweepable=False,
                 tooltip="Numerical integrator for the equations of motion",
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-integrator",
             ),
             ParamSpec(
                 "solver",
@@ -105,6 +110,7 @@ class SlidingBoxScenario(Scenario):
                 sweepable=False,
                 tooltip="Constraint solver algorithm",
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-solver",
             ),
             ParamSpec(
                 "cone",
@@ -115,6 +121,7 @@ class SlidingBoxScenario(Scenario):
                 sweepable=False,
                 tooltip="Contact friction cone type",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#option-cone",
             ),
             ParamSpec(
                 "solimp_0",
@@ -126,6 +133,7 @@ class SlidingBoxScenario(Scenario):
                 step=0.01,
                 tooltip="Constraint impedance: minimum (dmin)",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_1",
@@ -137,6 +145,7 @@ class SlidingBoxScenario(Scenario):
                 step=0.01,
                 tooltip="Constraint impedance: maximum (dmax)",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_2",
@@ -148,6 +157,7 @@ class SlidingBoxScenario(Scenario):
                 step=0.0001,
                 tooltip="Constraint impedance: transition width",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solref_0",
@@ -159,6 +169,7 @@ class SlidingBoxScenario(Scenario):
                 step=0.001,
                 tooltip="Constraint reference: time constant (s)",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solref",
             ),
             ParamSpec(
                 "solref_1",
@@ -170,6 +181,7 @@ class SlidingBoxScenario(Scenario):
                 step=0.05,
                 tooltip="Constraint reference: damping ratio",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solref",
             ),
             ParamSpec(
                 "noslip_iterations",
@@ -181,6 +193,7 @@ class SlidingBoxScenario(Scenario):
                 step=1,
                 tooltip="Number of no-slip friction constraint iterations",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#option-noslip-iterations",
             ),
             ParamSpec(
                 "impratio",
@@ -192,6 +205,7 @@ class SlidingBoxScenario(Scenario):
                 step=0.1,
                 tooltip="Ratio of impedance to constraint reference (impratio)",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#option-impratio",
             ),
         ]
 

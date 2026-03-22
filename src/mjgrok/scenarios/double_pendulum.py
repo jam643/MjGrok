@@ -13,6 +13,8 @@ import mujoco
 
 from mjgrok.scenarios.base import ParamSpec, PlotSpec, Scenario
 
+_DOCS = "https://mujoco.readthedocs.io/en/stable/XMLreference.html"
+
 _INTEGRATOR_MAP = {
     "Euler": mujoco.mjtIntegrator.mjINT_EULER,
     "RK4": mujoco.mjtIntegrator.mjINT_RK4,
@@ -96,6 +98,7 @@ class DoublePendulumScenario(Scenario):
                     "Sweep to observe energy dissipation rate."
                 ),
                 group="Joint Dynamics",
+                doc_url=f"{_DOCS}#body-joint-damping",
             ),
             # ── Simulation ───────────────────────────────────────────────────
             ParamSpec(
@@ -107,6 +110,7 @@ class DoublePendulumScenario(Scenario):
                     "Try 0.38 for Mars, 0.17 for Moon."
                 ),
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-gravity",
             ),
             ParamSpec(
                 "timestep", "Timestep (s)", "float", 0.002,
@@ -117,6 +121,7 @@ class DoublePendulumScenario(Scenario):
                     "implicit/implicitfast are stable but numerically dissipative."
                 ),
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-timestep",
             ),
             ParamSpec(
                 "integrator", "Integrator", "enum", "RK4",
@@ -129,6 +134,7 @@ class DoublePendulumScenario(Scenario):
                     "implicit/implicitfast: unconditionally stable but numerically dissipative."
                 ),
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-integrator",
             ),
         ]
 

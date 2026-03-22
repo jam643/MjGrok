@@ -9,6 +9,8 @@ import numpy as np
 
 from mjgrok.scenarios.base import ParamSpec, PlotSpec, Scenario
 
+_DOCS = "https://mujoco.readthedocs.io/en/stable/XMLreference.html"
+
 
 class PenetratingSphereScenario(Scenario):
     name = "Penetrating Sphere"
@@ -69,6 +71,7 @@ class PenetratingSphereScenario(Scenario):
                 step=0.0001,
                 tooltip="Simulation timestep",
                 group="Solver",
+                doc_url=f"{_DOCS}#option-timestep",
             ),
             ParamSpec(
                 "integrator",
@@ -79,6 +82,7 @@ class PenetratingSphereScenario(Scenario):
                 sweepable=False,
                 tooltip="Numerical integrator for the equations of motion",
                 group="Solver",
+                doc_url=f"{_DOCS}#option-integrator",
             ),
             ParamSpec(
                 "solver",
@@ -89,6 +93,7 @@ class PenetratingSphereScenario(Scenario):
                 sweepable=False,
                 tooltip="Constraint solver algorithm",
                 group="Solver",
+                doc_url=f"{_DOCS}#option-solver",
             ),
             ParamSpec(
                 "solimp_dmin",
@@ -100,6 +105,7 @@ class PenetratingSphereScenario(Scenario):
                 step=0.01,
                 tooltip="Constraint impedance: minimum (dmin)",
                 group="Constraint",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_dmax",
@@ -111,6 +117,7 @@ class PenetratingSphereScenario(Scenario):
                 step=0.01,
                 tooltip="Constraint impedance: maximum (dmax)",
                 group="Constraint",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_width",
@@ -122,6 +129,7 @@ class PenetratingSphereScenario(Scenario):
                 step=0.0001,
                 tooltip="Constraint impedance: transition width",
                 group="Constraint",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_midpoint",
@@ -133,6 +141,7 @@ class PenetratingSphereScenario(Scenario):
                 step=0.05,
                 tooltip="Constraint impedance: midpoint of transition",
                 group="Constraint",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_power",
@@ -144,6 +153,7 @@ class PenetratingSphereScenario(Scenario):
                 step=0.1,
                 tooltip="Constraint impedance: power of transition curve",
                 group="Constraint",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solref_timeconst",
@@ -155,6 +165,7 @@ class PenetratingSphereScenario(Scenario):
                 step=0.001,
                 tooltip="Constraint reference: time constant (s)",
                 group="Constraint",
+                doc_url=f"{_DOCS}#body-geom-solref",
             ),
             ParamSpec(
                 "solref_dampratio",
@@ -166,6 +177,7 @@ class PenetratingSphereScenario(Scenario):
                 step=0.05,
                 tooltip="Constraint reference: damping ratio",
                 group="Constraint",
+                doc_url=f"{_DOCS}#body-geom-solref",
             ),
             ParamSpec(
                 "impratio",
@@ -177,6 +189,7 @@ class PenetratingSphereScenario(Scenario):
                 step=0.1,
                 tooltip="Ratio of impedance to constraint reference (impratio)",
                 group="Constraint",
+                doc_url=f"{_DOCS}#option-impratio",
             ),
         ]
 

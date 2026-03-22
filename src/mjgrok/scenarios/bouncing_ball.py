@@ -14,6 +14,8 @@ import numpy as np
 
 from mjgrok.scenarios.base import ParamSpec, PlotSpec, Scenario
 
+_DOCS = "https://mujoco.readthedocs.io/en/stable/XMLreference.html"
+
 _INTEGRATOR_MAP = {
     "Euler": mujoco.mjtIntegrator.mjINT_EULER,
     "RK4": mujoco.mjtIntegrator.mjINT_RK4,
@@ -97,6 +99,7 @@ class BouncingBallScenario(Scenario):
                 sweepable=True,
                 tooltip="Simulation timestep - smaller values increase accuracy at impact",
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-timestep",
             ),
             ParamSpec(
                 "integrator",
@@ -107,6 +110,7 @@ class BouncingBallScenario(Scenario):
                 sweepable=False,
                 tooltip="Numerical integrator for the equations of motion",
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-integrator",
             ),
             ParamSpec(
                 "solver",
@@ -117,6 +121,7 @@ class BouncingBallScenario(Scenario):
                 sweepable=False,
                 tooltip="Constraint solver algorithm",
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-solver",
             ),
             ParamSpec(
                 "cone",
@@ -127,6 +132,7 @@ class BouncingBallScenario(Scenario):
                 sweepable=False,
                 tooltip="Friction cone approximation type",
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-cone",
             ),
             # Contact Solver group
             ParamSpec(
@@ -143,6 +149,7 @@ class BouncingBallScenario(Scenario):
                     "Higher values → stiffer contact → less penetration but more bounce."
                 ),
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_1",
@@ -155,6 +162,7 @@ class BouncingBallScenario(Scenario):
                 sweepable=True,
                 tooltip="Constraint impedance dmax: maximum impedance at full penetration",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_2",
@@ -167,6 +175,7 @@ class BouncingBallScenario(Scenario):
                 sweepable=True,
                 tooltip="Constraint impedance width: penetration depth where transition occurs",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_3",
@@ -179,6 +188,7 @@ class BouncingBallScenario(Scenario):
                 sweepable=True,
                 tooltip="Constraint impedance midpoint: fraction of width at transition midpoint",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_4",
@@ -191,6 +201,7 @@ class BouncingBallScenario(Scenario):
                 sweepable=True,
                 tooltip="Constraint impedance power: shape of impedance transition curve",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solref_0",
@@ -207,6 +218,7 @@ class BouncingBallScenario(Scenario):
                     "Must be > 2x timestep to remain stable."
                 ),
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solref",
             ),
             ParamSpec(
                 "solref_1",
@@ -222,6 +234,7 @@ class BouncingBallScenario(Scenario):
                     "<1.0 = under-damped (more bounce), >1.0 = over-damped."
                 ),
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solref",
             ),
             ParamSpec(
                 "impratio",
@@ -234,6 +247,7 @@ class BouncingBallScenario(Scenario):
                 sweepable=True,
                 tooltip="Ratio of frictional to normal constraint impedance",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#option-impratio",
             ),
         ]
 

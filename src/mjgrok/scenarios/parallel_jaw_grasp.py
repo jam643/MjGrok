@@ -9,6 +9,8 @@ import numpy as np
 
 from mjgrok.scenarios.base import ParamSpec, PlotSpec, Scenario
 
+_DOCS = "https://mujoco.readthedocs.io/en/stable/XMLreference.html"
+
 _INTEGRATOR_MAP = {
     "Euler": mujoco.mjtIntegrator.mjINT_EULER,
     "RK4": mujoco.mjtIntegrator.mjINT_RK4,
@@ -147,6 +149,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=True,
                 tooltip="Sliding friction coefficient between fingers and object",
                 group="Friction",
+                doc_url=f"{_DOCS}#body-geom-friction",
             ),
             # Simulation group
             ParamSpec(
@@ -160,6 +163,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=True,
                 tooltip="Simulation timestep",
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-timestep",
             ),
             ParamSpec(
                 "integrator",
@@ -170,6 +174,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=False,
                 tooltip="Numerical integrator for the equations of motion",
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-integrator",
             ),
             ParamSpec(
                 "solver",
@@ -180,6 +185,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=False,
                 tooltip="Constraint solver algorithm",
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-solver",
             ),
             # Contact Solver group
             ParamSpec(
@@ -191,6 +197,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=False,
                 tooltip="Friction cone approximation type",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#option-cone",
             ),
             ParamSpec(
                 "solimp_0",
@@ -203,6 +210,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=True,
                 tooltip="Constraint impedance: minimum (dmin)",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_1",
@@ -215,6 +223,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=True,
                 tooltip="Constraint impedance: maximum (dmax)",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_2",
@@ -227,6 +236,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=True,
                 tooltip="Constraint impedance: transition width",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_3",
@@ -239,6 +249,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=True,
                 tooltip="Constraint impedance: midpoint of transition (0-1)",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solimp_4",
@@ -251,6 +262,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=True,
                 tooltip="Constraint impedance: power of transition curve",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solimp",
             ),
             ParamSpec(
                 "solref_0",
@@ -263,6 +275,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=True,
                 tooltip="Constraint reference: time constant (s)",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solref",
             ),
             ParamSpec(
                 "solref_1",
@@ -275,6 +288,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=True,
                 tooltip="Constraint reference: damping ratio",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#body-geom-solref",
             ),
             ParamSpec(
                 "impratio",
@@ -287,6 +301,7 @@ class ParallelJawGraspScenario(Scenario):
                 sweepable=True,
                 tooltip="Ratio of frictional to normal constraint impedance",
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#option-impratio",
             ),
             ParamSpec(
                 "noslip_iterations",
@@ -302,6 +317,7 @@ class ParallelJawGraspScenario(Scenario):
                     "Reduces frictional slip at the cost of extra solve time."
                 ),
                 group="Contact Solver",
+                doc_url=f"{_DOCS}#option-noslip-iterations",
             ),
         ]
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -12,6 +13,22 @@ import numpy as np
 from mjgrok.scenarios.base import ParamSpec, Scenario
 
 _INPUT_TYPE_OPTIONS = ["slider", "text input", "sweep"]
+
+_LINK_THEME_ID: int | None = None
+
+
+def _get_link_theme() -> int:
+    """Return a cached DPG theme that makes a button look like a hyperlink."""
+    global _LINK_THEME_ID
+    if _LINK_THEME_ID is None:
+        with dpg.theme() as theme_id, dpg.theme_component(dpg.mvAll):
+            dpg.add_theme_color(dpg.mvThemeCol_Button, (0, 0, 0, 0))
+            dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (80, 140, 255, 40))
+            dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (80, 140, 255, 80))
+            dpg.add_theme_color(dpg.mvThemeCol_Text, (100, 180, 255, 255))
+            dpg.add_theme_style(dpg.mvStyleVar_FramePadding, 0, 0)
+        _LINK_THEME_ID = theme_id
+    return _LINK_THEME_ID
 
 
 @dataclass
@@ -52,7 +69,17 @@ class ParamPanel:
 
     def _build_param(self, spec: ParamSpec, parent: str | int) -> None:
         # ── Parameter label (full width, tooltip on hover) ────────────────────
-        lbl_id = dpg.add_text(spec.label, parent=parent)
+        if spec.doc_url:
+            url = spec.doc_url
+            lbl_id = dpg.add_button(
+                label=spec.label,
+                parent=parent,
+                callback=lambda: webbrowser.open(url),
+                small=True,
+            )
+            dpg.bind_item_theme(lbl_id, _get_link_theme())
+        else:
+            lbl_id = dpg.add_text(spec.label, parent=parent)
         if spec.tooltip:
             with dpg.tooltip(parent=lbl_id):
                 dpg.add_text(spec.tooltip)

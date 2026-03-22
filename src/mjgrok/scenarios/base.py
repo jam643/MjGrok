@@ -25,6 +25,7 @@ class ParamSpec:
     sweepable: bool = True
     tooltip: str = ""
     group: str = ""  # collapsible section label; empty = ungrouped (shown at top)
+    doc_url: str = ""  # MuJoCo docs URL; if set, label becomes a clickable link
 
 
 @dataclass

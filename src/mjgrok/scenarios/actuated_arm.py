@@ -10,6 +10,8 @@ import numpy as np
 
 from mjgrok.scenarios.base import ParamSpec, PlotSpec, Scenario
 
+_DOCS = "https://mujoco.readthedocs.io/en/stable/XMLreference.html"
+
 _INTEGRATOR_MAP = {
     "Euler": mujoco.mjtIntegrator.mjINT_EULER,
     "RK4": mujoco.mjtIntegrator.mjINT_RK4,
@@ -91,6 +93,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=True,
                 tooltip="Joint viscous damping coefficient (N*m*s/rad)",
                 group="Joint Dynamics",
+                doc_url=f"{_DOCS}#body-joint-damping",
             ),
             ParamSpec(
                 "armature",
@@ -103,6 +106,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=True,
                 tooltip="Rotor inertia added to joint (kg*m^2)",
                 group="Joint Dynamics",
+                doc_url=f"{_DOCS}#body-joint-armature",
             ),
             ParamSpec(
                 "stiffness",
@@ -115,6 +119,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=True,
                 tooltip="Joint spring stiffness (N*m/rad) - restores to q=0",
                 group="Joint Dynamics",
+                doc_url=f"{_DOCS}#body-joint-stiffness",
             ),
             ParamSpec(
                 "frictionloss",
@@ -127,6 +132,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=True,
                 tooltip="Dry friction torque (N*m) opposing joint motion",
                 group="Joint Dynamics",
+                doc_url=f"{_DOCS}#body-joint-frictionloss",
             ),
             # Actuator
             ParamSpec(
@@ -142,6 +148,7 @@ class ActuatedArmScenario(Scenario):
                     "motor: manual PD computed in apply_ctrl"
                 ),
                 group="Actuator",
+                doc_url=f"{_DOCS}#actuator-general-gaintype",
             ),
             ParamSpec(
                 "gear_ratio",
@@ -158,6 +165,7 @@ class ActuatedArmScenario(Scenario):
                     "High gear: more torque authority, less speed, more reflected armature inertia."
                 ),
                 group="Actuator",
+                doc_url=f"{_DOCS}#actuator-general-gear",
             ),
             ParamSpec(
                 "kp",
@@ -170,6 +178,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=True,
                 tooltip="Proportional gain for position or velocity actuator",
                 group="Actuator",
+                doc_url=f"{_DOCS}#actuator-general-gainprm",
             ),
             ParamSpec(
                 "kv",
@@ -182,6 +191,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=True,
                 tooltip="Derivative gain (used by position and motor actuator types)",
                 group="Actuator",
+                doc_url=f"{_DOCS}#actuator-general-biasprm",
             ),
             ParamSpec(
                 "max_torque",
@@ -198,6 +208,7 @@ class ActuatedArmScenario(Scenario):
                     "observe how the arm fails to reach target under gravity load."
                 ),
                 group="Actuator",
+                doc_url=f"{_DOCS}#actuator-general-forcerange",
             ),
             ParamSpec(
                 "target_angle_deg",
@@ -237,6 +248,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=False,
                 tooltip="Enable joint angle limits",
                 group="Joint Limits",
+                doc_url=f"{_DOCS}#body-joint-limited",
             ),
             ParamSpec(
                 "limit_range_deg",
@@ -249,6 +261,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=False,
                 tooltip="Symmetric joint limit ±N degrees from q=0",
                 group="Joint Limits",
+                doc_url=f"{_DOCS}#body-joint-range",
             ),
             ParamSpec(
                 "limit_margin_deg",
@@ -261,6 +274,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=False,
                 tooltip="Soft constraint activation margin near the limit (degrees)",
                 group="Joint Limits",
+                doc_url=f"{_DOCS}#body-joint-margin",
             ),
             # Simulation
             ParamSpec(
@@ -278,6 +292,7 @@ class ActuatedArmScenario(Scenario):
                     "Shows how gravitational load changes steady-state error and energy."
                 ),
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-gravity",
             ),
             ParamSpec(
                 "timestep",
@@ -290,6 +305,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=True,
                 tooltip="Simulation timestep",
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-timestep",
             ),
             ParamSpec(
                 "integrator",
@@ -300,6 +316,7 @@ class ActuatedArmScenario(Scenario):
                 sweepable=False,
                 tooltip="Numerical integrator for the equations of motion",
                 group="Simulation",
+                doc_url=f"{_DOCS}#option-integrator",
             ),
         ]
 
