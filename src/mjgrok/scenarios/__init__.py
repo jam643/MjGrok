@@ -2,6 +2,7 @@
 
 from mjgrok.scenarios.actuated_arm import ActuatedArmScenario
 from mjgrok.scenarios.base import ParamSpec, PlotSpec, Scenario
+from mjgrok.scenarios.bouncing_ball import BouncingBallScenario
 from mjgrok.scenarios.parallel_jaw_grasp import ParallelJawGraspScenario
 from mjgrok.scenarios.penetrating_sphere import PenetratingSphereScenario
 from mjgrok.scenarios.sliding_box import SlidingBoxScenario
@@ -9,6 +10,7 @@ from mjgrok.scenarios.sliding_box import SlidingBoxScenario
 SCENARIOS: list[Scenario] = [
     SlidingBoxScenario(),
     PenetratingSphereScenario(),
+    BouncingBallScenario(),
     ParallelJawGraspScenario(),
     ActuatedArmScenario(),
 ]
@@ -21,6 +23,7 @@ __all__ = [
     "PlotSpec",
     "Scenario",
     "ActuatedArmScenario",
+    "BouncingBallScenario",
     "ParallelJawGraspScenario",
     "PenetratingSphereScenario",
     "SlidingBoxScenario",
