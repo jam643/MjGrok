@@ -19,6 +19,7 @@ import numpy as np
 import pytest
 
 from mjgrok.scenarios.actuated_arm import ActuatedArmScenario
+from mjgrok.scenarios.hinged_finger_pinch import HingedFingerPinchScenario
 from mjgrok.scenarios.penetrating_sphere import PenetratingSphereScenario
 from mjgrok.scenarios.sliding_box import SlidingBoxScenario
 from mjgrok.scenarios import SCENARIOS
@@ -505,3 +506,89 @@ class TestPenetratingSphere:
 
         series = self.scenario.extract_series(model, data, data.time)
         assert series["fn"] >= 0.0, f"Normal force must be non-negative, got {series['fn']}"
+
+
+# ---------------------------------------------------------------------------
+# Hinged Finger Pinch
+# ---------------------------------------------------------------------------
+
+class TestHingedFingerPinch:
+    def setup_method(self):
+        self.scenario = HingedFingerPinchScenario()
+        self.params = self.scenario.default_params()
+
+    def _run(self, **overrides):
+        params = {**self.params, **overrides}
+        model, data = run_to_steady_state(self.scenario, params)
+        return model, data, self.scenario.extract_series(model, data, data.time)
+
+    def test_hinge_range_and_springref_compile_to_radians(self):
+        model = self.scenario.build_model(self.params)
+        jid = model.joint("left_hinge").id
+        assert abs(model.jnt_range[jid][1] - math.pi / 2) < 1e-6
+        expected = math.radians(self.params["open_angle_deg"])
+        assert abs(model.qpos_spring[model.jnt_qposadr[jid]] - expected) < 1e-6
+
+    def test_fingers_start_open_without_contact(self):
+        model = self.scenario.build_model(self.params)
+        data = mujoco.MjData(model)
+        self.scenario.setup_data(model, data, self.params)
+        mujoco.mj_forward(model, data)
+        series = self.scenario.extract_series(model, data, data.time)
+        assert abs(series["left_true_deg"] - self.params["open_angle_deg"]) < 1e-6
+        assert series["left_fn"] == 0.0 and series["right_fn"] == 0.0
+
+    def test_default_grasp_holds_after_table_retracts(self):
+        _, _, series = self._run()
+        assert series["table_fn"] == 0.0, "table should have left the object"
+        assert series["obj_z"] > -0.01, f"object dropped to {series['obj_z']:.3f}"
+        assert series["left_fn"] > 0.0 and series["right_fn"] > 0.0
+
+    def test_frictionless_fingers_drop_object(self):
+        _, _, series = self._run(finger_friction=0.0)
+        assert series["obj_z"] < -0.05, "object should fall with no finger friction"
+
+    def test_sideways_retract_clears_object(self):
+        _, _, series = self._run(table_retract_direction="sideways")
+        assert series["table_fn"] == 0.0
+
+    def test_frictionloss_lags_while_moving_then_creeps_away(self):
+        """Fingers spaced to miss the object.
+
+        During the constant-velocity ramp the error is (frictionloss + (kv + damping) * v) / kp.
+        After the ramp, MuJoCo's regularized friction constraint lets the joint creep, so the error
+        decays well below frictionloss / kp instead of holding it.
+        """
+        frictionloss = 0.25
+        p = {**self.params, "hinge_spacing": 0.12, "frictionloss": frictionloss}
+        model = self.scenario.build_model(p)
+        data = mujoco.MjData(model)
+        self.scenario.setup_data(model, data, p)
+        mujoco.mj_forward(model, data)
+        ramp_end = p["ramp_start"] + p["ramp_duration"]
+        err_at_ramp_end = None
+        for _ in range(int(self.scenario.sim_duration / model.opt.timestep)):
+            self.scenario.apply_ctrl(model, data, p)
+            mujoco.mj_step(model, data)
+            if err_at_ramp_end is None and data.time >= ramp_end - 0.01:
+                s = self.scenario.extract_series(model, data, data.time)
+                err_at_ramp_end = math.radians(s["left_err_deg"])
+        final = self.scenario.extract_series(model, data, data.time)
+        final_err = math.radians(final["left_err_deg"])
+
+        v = math.radians(p["close_angle_deg"] - p["open_angle_deg"]) / p["ramp_duration"]
+        expected = (frictionloss + (p["kv"] + p["damping"]) * v) / p["kp"]
+        assert abs(err_at_ramp_end - expected) < 0.15 * expected
+        assert abs(final_err) < 0.1 * frictionloss / p["kp"]
+
+    def test_encoder_bias_offsets_true_angle_in_free_space(self):
+        bias = 3.0
+        _, _, series = self._run(hinge_spacing=0.12, encoder_bias_deg=bias)
+        assert abs(series["left_err_deg"]) < 0.1, "measured angle should track the target"
+        assert abs(series["target_deg"] - series["left_true_deg"] - bias) < 0.1
+
+    def test_backlash_reduces_stall_torque(self):
+        _, _, base = self._run(actuator_mode="motor PD + backlash", backlash_deg=0.0)
+        _, _, lash = self._run(actuator_mode="motor PD + backlash", backlash_deg=4.0)
+        expected_drop = self.params["kp"] * math.radians(4.0) / 2
+        assert abs((base["left_torque"] - lash["left_torque"]) - expected_drop) < 0.02
