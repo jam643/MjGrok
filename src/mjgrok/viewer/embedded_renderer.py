@@ -152,9 +152,9 @@ class EmbeddedRenderer:
     def close(self) -> None:
         self._stop_event.set()
         self._render_event.set()
+        # The render thread closes the renderer as it exits; closing it here would free its
+        # MjrContext inside the main thread's current GL context, i.e. DearPyGUI's.
         self._render_thread.join(timeout=2.0)
-        with self._lock:
-            self._close_renderer()
 
     @property
     def current_frame(self) -> int:
@@ -221,6 +221,9 @@ class EmbeddedRenderer:
                 print("[EmbeddedRenderer] render thread error:")
                 print_exc()
 
+        with self._lock:
+            self._close_renderer()
+
     def _apply_pending(self) -> None:
         """Apply a queued load_trajectory() call. Runs on the render thread."""
         with self._lock:
@@ -239,12 +242,17 @@ class EmbeddedRenderer:
         qpos = np.column_stack([cache.series_arr[f"qpos_{i}"] for i in range(nq)])
         qvel = np.column_stack([cache.series_arr[f"qvel_{i}"] for i in range(nv)])
 
-        new_renderer = mujoco.Renderer(new_model, self.RENDER_H, self.RENDER_W)
         new_data = mujoco.MjData(new_model)
 
+        # Close the old renderer before creating the new one. Renderer.close() frees its MjrContext
+        # after dropping its own GL context, so the frees land in whichever context is current —
+        # a newer renderer's — deleting that renderer's framebuffer and textures.
         with self._lock:
             prev_frame = self._current_frame
             self._close_renderer()
+        new_renderer = mujoco.Renderer(new_model, self.RENDER_H, self.RENDER_W)
+
+        with self._lock:
             self._model = new_model
             self._data = new_data
             self._renderer = new_renderer
