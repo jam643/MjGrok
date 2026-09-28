@@ -32,21 +32,19 @@ class SimulationRunner:
         scenario: Scenario,
         params: dict[str, Any],
         duration: float = 5.0,
-        dt: float = 0.002,
         label: str = "",
     ) -> None:
         """Run a single simulation."""
-        self._start(scenario, [(label, params)], duration, dt)
+        self._start(scenario, [(label, params)], duration)
 
     def run_batch(
         self,
         scenario: Scenario,
         labeled_params: list[tuple[str, dict[str, Any]]],
         duration: float = 5.0,
-        dt: float = 0.002,
     ) -> None:
         """Run multiple simulations sequentially, calling on_done for each."""
-        self._start(scenario, labeled_params, duration, dt)
+        self._start(scenario, labeled_params, duration)
 
     def cancel(self) -> None:
         """Signal cancellation and wait up to 2s for thread to exit."""
@@ -60,13 +58,12 @@ class SimulationRunner:
         scenario: Scenario,
         labeled_params: list[tuple[str, dict[str, Any]]],
         duration: float,
-        dt: float,
     ) -> None:
         self.cancel()
         self._cancel_event = threading.Event()
         self._thread = threading.Thread(
             target=self._run_loop,
-            args=(scenario, labeled_params, duration, dt),
+            args=(scenario, labeled_params, duration),
             daemon=True,
         )
         self._thread.start()
@@ -76,10 +73,8 @@ class SimulationRunner:
         scenario: Scenario,
         labeled_params: list[tuple[str, dict[str, Any]]],
         duration: float,
-        dt: float,
     ) -> None:
         total_runs = len(labeled_params)
-        total_steps = int(duration / dt)
 
         for run_idx, (label, params) in enumerate(labeled_params):
             if self._cancel_event.is_set():
@@ -87,6 +82,8 @@ class SimulationRunner:
             try:
                 model = scenario.build_model(params)
                 data = mujoco.MjData(model)
+                # Step count follows each run's own timestep so `duration` is always sim seconds.
+                total_steps = int(round(duration / model.opt.timestep))
                 scenario.setup_data(model, data, params)
                 mujoco.mj_forward(model, data)
                 cache = TrajectoryCache(params=dict(params), label=label)

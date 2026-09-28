@@ -592,3 +592,28 @@ class TestHingedFingerPinch:
         _, _, lash = self._run(actuator_mode="motor PD + backlash", backlash_deg=4.0)
         expected_drop = self.params["kp"] * math.radians(4.0) / 2
         assert abs((base["left_torque"] - lash["left_torque"]) - expected_drop) < 0.02
+
+
+# ---------------------------------------------------------------------------
+# Simulation runner
+# ---------------------------------------------------------------------------
+
+class TestSimulationRunner:
+    @pytest.mark.parametrize("timestep", [0.001, 0.002, 0.004])
+    def test_rollout_covers_duration_for_any_timestep(self, timestep):
+        from mjgrok.simulation.runner import SimulationRunner
+
+        caches, errors = [], []
+        runner = SimulationRunner(
+            on_done=caches.append, on_error=errors.append, on_progress=lambda _: None
+        )
+        scenario = HingedFingerPinchScenario()
+        params = {**scenario.default_params(), "timestep": timestep}
+        duration = 0.5
+        runner.run(scenario, params, duration=duration)
+        runner._thread.join(timeout=30.0)
+
+        assert not errors, errors
+        (cache,) = caches
+        assert abs(cache.times_arr[-1] - duration) < 1e-9
+        assert len(cache.times_arr) == round(duration / timestep)

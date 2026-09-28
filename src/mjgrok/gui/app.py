@@ -340,12 +340,11 @@ class MjGrokApp:
                 self._scenario,
                 labeled_params[0][1],
                 duration=self._scenario.sim_duration,
-                dt=0.002,
                 label=labeled_params[0][0],
             )
         else:
             self._runner.run_batch(
-                self._scenario, labeled_params, duration=self._scenario.sim_duration, dt=0.002
+                self._scenario, labeled_params, duration=self._scenario.sim_duration
             )
 
     def _build_labeled_params(
