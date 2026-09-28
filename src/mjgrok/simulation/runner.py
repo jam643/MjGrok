@@ -18,14 +18,24 @@ class SimulationRunner:
         self,
         on_done: Callable[[TrajectoryCache], None],
         on_error: Callable[[Exception], None],
-        on_progress: Callable[[float], None],  # fraction 0.0–1.0 across whole batch
     ) -> None:
         self.on_done = on_done
         self.on_error = on_error
-        self.on_progress = on_progress
 
         self._thread: threading.Thread | None = None
         self._cancel_event = threading.Event()
+        # Fraction 0.0–1.0 across the whole batch, polled by the GUI thread. Not pushed via a
+        # callback: dpg.set_value() blocks on DearPyGUI's lock until the current frame finishes
+        # rendering, so frequent calls from the simulation thread stall the rollout.
+        self._progress: float = 0.0
+
+    @property
+    def progress(self) -> float:
+        return self._progress
+
+    @property
+    def is_running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
 
     def run(
         self,
@@ -61,6 +71,7 @@ class SimulationRunner:
     ) -> None:
         self.cancel()
         self._cancel_event = threading.Event()
+        self._progress = 0.0
         self._thread = threading.Thread(
             target=self._run_loop,
             args=(scenario, labeled_params, duration),
@@ -103,14 +114,13 @@ class SimulationRunner:
                     qvel_values = {f"qvel_{i}": float(data.qvel[i]) for i in range(len(data.qvel))}
                     cache.append(data.time, {**values, **qpos_values, **qvel_values})
 
-                    if step % 50 == 0:
-                        overall = (run_idx + (step + 1) / total_steps) / total_runs
-                        self.on_progress(overall)
+                    self._progress = (run_idx + (step + 1) / total_steps) / total_runs
 
                 cache.rollout_ms = (time.perf_counter() - t0) * 1000.0
                 cache.finalize()
                 self.on_done(cache)
 
             except Exception as e:
+                self._progress = 0.0
                 self.on_error(e)
                 return

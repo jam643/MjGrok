@@ -35,7 +35,6 @@ class MjGrokApp:
         self._runner = SimulationRunner(
             on_done=self._on_sim_done,
             on_error=self._on_sim_error,
-            on_progress=self._on_sim_progress,
         )
 
         self._embedded: EmbeddedRenderer | None = None
@@ -59,6 +58,8 @@ class MjGrokApp:
         while dpg.is_dearpygui_running():
             if self._embedded:
                 self._embedded.flush_to_dpg()
+            if self._runner.is_running:
+                dpg.set_value("progress_bar", self._runner.progress)
             dpg.render_dearpygui_frame()
         dpg.destroy_context()
 
@@ -446,9 +447,6 @@ class MjGrokApp:
     def _on_sim_error(self, exc: Exception) -> None:
         dpg.set_value("status_text", f"Error: {exc}")
         dpg.set_value("progress_bar", 0.0)
-
-    def _on_sim_progress(self, frac: float) -> None:
-        dpg.set_value("progress_bar", frac)
 
     # ── Playback controls ───────────────────────────────────────────────────
 

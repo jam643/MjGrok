@@ -27,11 +27,7 @@ def on_error(e):
     done_event.set()
 
 
-def on_progress(frac):
-    pass  # suppress for cleaner output
-
-
-runner = SimulationRunner(on_done=on_done, on_error=on_error, on_progress=on_progress)
+runner = SimulationRunner(on_done=on_done, on_error=on_error)
 
 # Test 1: normal run
 print("=== Test 1: Normal 2s run ===")

@@ -604,9 +604,7 @@ class TestSimulationRunner:
         from mjgrok.simulation.runner import SimulationRunner
 
         caches, errors = [], []
-        runner = SimulationRunner(
-            on_done=caches.append, on_error=errors.append, on_progress=lambda _: None
-        )
+        runner = SimulationRunner(on_done=caches.append, on_error=errors.append)
         scenario = HingedFingerPinchScenario()
         params = {**scenario.default_params(), "timestep": timestep}
         duration = 0.5
