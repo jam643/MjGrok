@@ -54,7 +54,7 @@ class EmbeddedRenderer:
         # Pixel buffer — render thread writes, main thread flushes to DPG.
         # Metal requires GPU texture uploads on the main thread.
         self._pixel_lock = threading.Lock()
-        self._pending_pixels: list | None = None  # RGBA float32 list, ready for set_value
+        self._pending_pixels: np.ndarray | None = None  # flat RGBA float32, ready for set_value
 
         self._on_frame: Callable[[int], None] | None = None
 
@@ -167,7 +167,7 @@ class EmbeddedRenderer:
         frame_interval = 1.0 / fps
 
         while not self._stop_event.is_set():
-            self._render_event.wait(timeout=frame_interval)
+            triggered = self._render_event.wait(timeout=frame_interval)
             self._render_event.clear()
 
             if self._stop_event.is_set():
@@ -183,7 +183,9 @@ class EmbeddedRenderer:
                     playing = self._playing
                     at_end = frame >= self._n_frames - 1 if self._n_frames > 0 else True
 
-                if not has_renderer:
+                # Only redraw when a load/seek/step/play asked for it; re-rendering an unchanged
+                # frame every timeout would hold the GIL and starve the simulation thread.
+                if not has_renderer or not (triggered or playing):
                     continue
 
                 # Render the current frame
@@ -265,12 +267,13 @@ class EmbeddedRenderer:
         renderer.update_scene(data)
         raw = renderer.render()  # (H, W, 3) uint8
 
-        # Convert to RGBA float32 list. Metal requires GPU uploads on the main
-        # thread, so we store here and flush via flush_to_dpg() from the main thread.
+        # Convert to flat RGBA float32. Metal requires GPU uploads on the main thread, so we
+        # store here and flush via flush_to_dpg() from the main thread. DPG takes the numpy
+        # buffer directly; a Python list of every channel costs ~10x more under the GIL.
         rgba = np.ones((self.RENDER_H, self.RENDER_W, 4), dtype=np.float32)
-        rgba[:, :, :3] = raw.astype(np.float32) / 255.0
+        rgba[:, :, :3] = raw * np.float32(1.0 / 255.0)
         with self._pixel_lock:
-            self._pending_pixels = rgba.ravel().tolist()
+            self._pending_pixels = rgba.ravel()
 
     def _close_renderer(self) -> None:
         """Close and release the renderer. Must be called with _lock held."""
