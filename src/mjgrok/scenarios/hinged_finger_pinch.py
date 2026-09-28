@@ -9,6 +9,7 @@ the run, after which only the fingers hold the object.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import Any
 
 import mujoco
@@ -38,6 +39,25 @@ _CONE_MAP = {
 }
 
 _SIDES = ("left", "right")
+# Per-side series keys, built once rather than formatted every step.
+_SIDE_KEYS = tuple(
+    {
+        name: f"{side}_{name}"
+        for name in (
+            "true_deg",
+            "meas_deg",
+            "err_deg",
+            "vel_degs",
+            "torque",
+            "frictionloss_torque",
+            "fn",
+            "ft",
+            "util",
+            "slip",
+        )
+    }
+    for side in _SIDES
+)
 
 # Fixed geometry not worth a slider. Depths are the Y half-extents; the scene is planar, so they
 # only set how many contact points a face-face contact spreads over.
@@ -45,7 +65,8 @@ _FINGER_DEPTH = 0.015
 _OBJECT_DEPTH = 0.02
 _TABLE_HALF_SIZE = (0.15, 0.05, 0.02)
 _TABLE_MASS = 1.0
-_TABLE_KP = 2000.0
+# Stiff enough to follow a fast retract ramp.
+_TABLE_KP = 20000.0
 _FLOOR_Z = -0.2
 
 # Keep a cylinder's axis along Y so it is a disc in the X-Z plane.
@@ -77,6 +98,9 @@ class HingedFingerPinchScenario(Scenario):
         "friction, backlash, encoder bias, contact friction/softness, and contact angle (hinge "
         "spacing) decide whether the object slips."
     )
+
+    _index_cache: tuple[mujoco.MjModel, _Indices] | None = None
+    _force_buf = np.zeros(6)  # mj_contactForce output, reused every step
 
     @property
     def sim_duration(self) -> float:
@@ -438,7 +462,7 @@ class HingedFingerPinchScenario(Scenario):
                 "table_retract_duration",
                 "Retract Duration (s)",
                 "float",
-                0.2,
+                0.05,
                 min_val=0.0,
                 max_val=2.0,
                 step=0.05,
@@ -450,7 +474,7 @@ class HingedFingerPinchScenario(Scenario):
                 "table_retract_distance",
                 "Retract Distance (m)",
                 "float",
-                0.08,
+                0.03,
                 min_val=0.0,
                 max_val=0.15,
                 step=0.005,
@@ -465,7 +489,7 @@ class HingedFingerPinchScenario(Scenario):
                 "table_retract_direction",
                 "Retract Direction",
                 "enum",
-                "down",
+                "sideways",
                 choices=["down", "sideways"],
                 sweepable=False,
                 tooltip=(
@@ -1030,6 +1054,7 @@ class HingedFingerPinchScenario(Scenario):
 
         # Cached for extract_series, which only receives (model, data, t).
         self._params = dict(params)
+        self._index_cache = None
         return spec
 
     def setup_data(
@@ -1078,62 +1103,41 @@ class HingedFingerPinchScenario(Scenario):
         motor_mode = params["actuator_mode"] == "motor PD + backlash"
         kp, kv = float(params["kp"]), float(params["kv"])
         backlash = math.radians(float(params["backlash_deg"]))
-        for i, side in enumerate(_SIDES):
+        for i in range(len(_SIDES)):
             if motor_mode:
-                jid = model.joint(f"{side}_hinge").id
-                q = float(data.qpos[model.jnt_qposadr[jid]])
-                qdot = float(data.qvel[model.jnt_dofadr[jid]])
+                idx = self._indices(model)
+                q = float(data.qpos[idx.hinge_qpos[i]])
+                qdot = float(data.qvel[idx.hinge_dof[i]])
                 # forcerange clips this to the effort limit.
                 data.ctrl[i] = kp * _deadzone(servo_target - q, backlash) - kv * qdot
             else:
                 data.ctrl[i] = servo_target
         data.ctrl[2] = self._table_target(t, params)
 
-    def _finger_contact_stats(
-        self,
-        model: mujoco.MjModel,
-        data: mujoco.MjData,
-        finger_geom: int,
-        object_geom: int,
-        object_body: int,
-        finger_body: int,
-    ) -> tuple[float, float, float, float, float]:
-        """Aggregate the contacts between one finger and the object.
+    def _indices(self, model: mujoco.MjModel) -> _Indices:
+        """Model addresses used every step, resolved once per compiled model."""
+        cached = self._index_cache
+        if cached is not None and cached[0] is model:
+            return cached[1]
 
-        Returns:
-            (normal force sum, |tangential force sum|, effective mu, normal-force-weighted
-            tangential slip speed, max penetration).
-        """
-        fn_sum = 0.0
-        ft_world = np.zeros(3)
-        slip_weighted = 0.0
-        mu = 0.0
-        max_pen = 0.0
-        force = np.zeros(6)
-        jacp_o = np.zeros((3, model.nv))
-        jacp_f = np.zeros((3, model.nv))
-        for i in range(data.ncon):
-            con = data.contact[i]
-            if {con.geom1, con.geom2} != {finger_geom, object_geom}:
-                continue
-            mujoco.mj_contactForce(model, data, i, force)
-            # Rows of `frame` are the contact normal then the two tangents, in world coordinates.
-            frame = con.frame.reshape(3, 3)
-            fn = float(force[0])
-            fn_sum += fn
-            ft_world += force[1] * frame[1] + force[2] * frame[2]
-            mu = float(con.friction[0])
-            max_pen = max(max_pen, -float(con.dist))
+        def qpos(name: str) -> int:
+            return int(model.jnt_qposadr[model.joint(name).id])
 
-            mujoco.mj_jac(model, data, jacp_o, None, con.pos, object_body)
-            mujoco.mj_jac(model, data, jacp_f, None, con.pos, finger_body)
-            v_rel = (jacp_o - jacp_f) @ data.qvel
-            v_t = v_rel - np.dot(v_rel, frame[0]) * frame[0]
-            slip_weighted += fn * float(np.linalg.norm(v_t))
+        def dof(name: str) -> int:
+            return int(model.jnt_dofadr[model.joint(name).id])
 
-        ft = float(np.linalg.norm(ft_world))
-        slip = slip_weighted / fn_sum if fn_sum > 1e-9 else 0.0
-        return fn_sum, ft, mu, slip, max_pen
+        idx = _Indices(
+            hinge_qpos=tuple(qpos(f"{side}_hinge") for side in _SIDES),
+            hinge_dof=tuple(dof(f"{side}_hinge") for side in _SIDES),
+            finger_geom=tuple(model.geom(f"{side}_finger_geom").id for side in _SIDES),
+            object_geom=model.geom("object_geom").id,
+            table_geom=model.geom("table_geom").id,
+            obj_qpos=(qpos("obj_x"), qpos("obj_z"), qpos("obj_theta")),
+            obj_dof=(dof("obj_x"), dof("obj_z")),
+            table_qpos=qpos("table_slide"),
+        )
+        self._index_cache = (model, idx)
+        return idx
 
     def extract_series(
         self,
@@ -1141,76 +1145,126 @@ class HingedFingerPinchScenario(Scenario):
         data: mujoco.MjData,
         t: float,
     ) -> dict[str, float]:
+        # Runs every physics step, so it favors scalar Python over numpy on tiny arrays.
         params = self._params
+        idx = self._indices(model)
         bias = math.radians(float(params["encoder_bias_deg"]))
         target = self._finger_target(t, params)
-        object_geom = model.geom("object_geom").id
-        object_body = model.body("object").id
+        qpos, qvel = data.qpos, data.qvel
+
+        # Friction-loss constraint torque per finger dof (no rows when frictionloss = 0).
+        fl_torque = dict.fromkeys(idx.hinge_dof, 0.0)
+        nefc = data.nefc
+        if nefc:
+            fl_rows = np.flatnonzero(
+                data.efc_type[:nefc] == mujoco.mjtConstraint.mjCNSTR_FRICTION_DOF
+            )
+            for dof, force in zip(
+                data.efc_id[fl_rows].tolist(), data.efc_force[fl_rows].tolist(), strict=True
+            ):
+                if dof in fl_torque:
+                    fl_torque[dof] += force
+
+        # One pass over the object's contacts. Slot 0/1 = left/right finger, 2 = table.
+        fn = [0.0, 0.0, 0.0]
+        ft = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+        slip = [0.0, 0.0]
+        mu = [0.0, 0.0]
+        pen = 0.0
+        ncon = data.ncon
+        if ncon:
+            slot_of = {idx.finger_geom[0]: 0, idx.finger_geom[1]: 1, idx.table_geom: 2}
+            og = idx.object_geom
+            contact = data.contact
+            geom1 = contact.geom1[:ncon].tolist()
+            geom2 = contact.geom2[:ncon].tolist()
+            frames = contact.frame[:ncon].tolist()
+            friction = contact.friction[:ncon, 0].tolist()
+            dist = contact.dist[:ncon].tolist()
+            dims = contact.dim[:ncon].tolist()
+            efc_adr = contact.efc_address[:ncon].tolist()
+            efc_vel = data.efc_vel
+            elliptic = model.opt.cone == mujoco.mjtCone.mjCONE_ELLIPTIC
+            buf = self._force_buf
+            for i in range(ncon):
+                g1, g2 = geom1[i], geom2[i]
+                other = g2 if g1 == og else g1 if g2 == og else None
+                slot = slot_of.get(other)
+                if slot is None:
+                    continue
+                mujoco.mj_contactForce(model, data, i, buf)
+                f_n, f_t1, f_t2 = buf[0], buf[1], buf[2]
+                fn[slot] += f_n
+                if slot == 2:
+                    continue
+                # `frame` rows are the normal then the two tangents, in world coordinates.
+                fr = frames[i]
+                acc = ft[slot]
+                for d in range(3):
+                    acc[d] += f_t1 * fr[3 + d] + f_t2 * fr[6 + d]
+                mu[slot] = friction[i]
+                pen = max(pen, -dist[i])
+                # Tangential relative velocity from the contact's constraint rows (J @ qvel).
+                adr = efc_adr[i]
+                if dims[i] >= 3 and adr >= 0:
+                    if elliptic:
+                        # Rows: normal, tangent1, tangent2, ...
+                        v1, v2 = efc_vel[adr + 1], efc_vel[adr + 2]
+                    else:
+                        # Pyramid edge rows n +/- mu*t per tangent, so each edge pair's
+                        # difference is 2 * mu * (tangential velocity).
+                        two_mu = 2.0 * friction[i]
+                        v1 = (efc_vel[adr] - efc_vel[adr + 1]) / two_mu
+                        v2 = (efc_vel[adr + 2] - efc_vel[adr + 3]) / two_mu
+                    slip[slot] += f_n * math.hypot(v1, v2)
 
         out: dict[str, float] = {"target_deg": math.degrees(target)}
-        max_pen = 0.0
-        for i, side in enumerate(_SIDES):
-            jid = model.joint(f"{side}_hinge").id
-            dof = model.jnt_dofadr[jid]
-            q = float(data.qpos[model.jnt_qposadr[jid]])
+        for i, keys in enumerate(_SIDE_KEYS):
+            q = float(qpos[idx.hinge_qpos[i]])
+            dof = idx.hinge_dof[i]
             meas = q + bias
-            out[f"{side}_true_deg"] = math.degrees(q)
-            out[f"{side}_meas_deg"] = math.degrees(meas)
-            out[f"{side}_err_deg"] = math.degrees(target - meas)
-            out[f"{side}_vel_degs"] = math.degrees(float(data.qvel[dof]))
-            out[f"{side}_torque"] = float(data.actuator_force[i])
-            # Friction-loss constraint torque on this dof (zero when frictionloss = 0).
-            out[f"{side}_frictionloss_torque"] = float(
-                sum(
-                    data.efc_force[k]
-                    for k in range(data.nefc)
-                    if data.efc_type[k] == mujoco.mjtConstraint.mjCNSTR_FRICTION_DOF
-                    and data.efc_id[k] == dof
-                )
-            )
+            f_n = fn[i]
+            f_t = math.hypot(*ft[i])
+            out[keys["true_deg"]] = math.degrees(q)
+            out[keys["meas_deg"]] = math.degrees(meas)
+            out[keys["err_deg"]] = math.degrees(target - meas)
+            out[keys["vel_degs"]] = math.degrees(float(qvel[dof]))
+            out[keys["torque"]] = float(data.actuator_force[i])
+            out[keys["frictionloss_torque"]] = fl_torque[dof]
+            out[keys["fn"]] = f_n
+            out[keys["ft"]] = f_t
+            out[keys["util"]] = f_t / (mu[i] * f_n) if mu[i] > 0.0 and f_n > 1e-6 else 0.0
+            # Normal-force-weighted mean over the finger's contact points.
+            out[keys["slip"]] = slip[i] / f_n if f_n > 1e-9 else 0.0
 
-            fn, ft, mu, slip, pen = self._finger_contact_stats(
-                model,
-                data,
-                model.geom(f"{side}_finger_geom").id,
-                object_geom,
-                object_body,
-                model.body(f"{side}_finger").id,
-            )
-            out[f"{side}_fn"] = fn
-            out[f"{side}_ft"] = ft
-            out[f"{side}_util"] = ft / (mu * fn) if mu > 0.0 and fn > 1e-6 else 0.0
-            out[f"{side}_slip"] = slip
-            max_pen = max(max_pen, pen)
-
-        table_geom = model.geom("table_geom").id
-        table_fn = 0.0
-        force = np.zeros(6)
-        for i in range(data.ncon):
-            con = data.contact[i]
-            if {con.geom1, con.geom2} == {table_geom, object_geom}:
-                mujoco.mj_contactForce(model, data, i, force)
-                table_fn += float(force[0])
-
-        obj_x = float(data.qpos[model.jnt_qposadr[model.joint("obj_x").id]])
-        obj_z = float(data.qpos[model.jnt_qposadr[model.joint("obj_z").id]])
-        obj_theta = float(data.qpos[model.jnt_qposadr[model.joint("obj_theta").id]])
-        table_jid = model.joint("table_slide").id
-
+        x_adr, z_adr, theta_adr = idx.obj_qpos
+        vx_adr, vz_adr = idx.obj_dof
         out |= {
-            "table_fn": table_fn,
+            "table_fn": fn[2],
             "object_weight": float(params["object_mass"]) * 9.81,
             "effort_limit": float(params["effort_limit"]),
             "util_limit": 1.0,
             # Object joint positions are offsets from its resting pose on the table.
-            "obj_x": obj_x,
-            "obj_z": obj_z,
-            "obj_theta_deg": math.degrees(obj_theta),
-            "obj_vx": float(data.qvel[model.jnt_dofadr[model.joint("obj_x").id]]),
-            "obj_vz": float(data.qvel[model.jnt_dofadr[model.joint("obj_z").id]]),
-            "table_pos": float(data.qpos[model.jnt_qposadr[table_jid]]),
-            "max_pen": max_pen,
-            "ncon": float(data.ncon),
+            "obj_x": float(qpos[x_adr]),
+            "obj_z": float(qpos[z_adr]),
+            "obj_theta_deg": math.degrees(float(qpos[theta_adr])),
+            "obj_vx": float(qvel[vx_adr]),
+            "obj_vz": float(qvel[vz_adr]),
+            "table_pos": float(qpos[idx.table_qpos]),
+            "max_pen": max(0.0, pen),
+            "ncon": float(ncon),
             "solver_niter": float(data.solver_niter[0]),
         }
         return out
+
+
+@dataclass(frozen=True)
+class _Indices:
+    hinge_qpos: tuple[int, ...]
+    hinge_dof: tuple[int, ...]
+    finger_geom: tuple[int, ...]
+    object_geom: int
+    table_geom: int
+    obj_qpos: tuple[int, int, int]
+    obj_dof: tuple[int, int]
+    table_qpos: int
