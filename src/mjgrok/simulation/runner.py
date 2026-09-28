@@ -86,7 +86,9 @@ class SimulationRunner:
                 total_steps = int(round(duration / model.opt.timestep))
                 scenario.setup_data(model, data, params)
                 mujoco.mj_forward(model, data)
-                cache = TrajectoryCache(params=dict(params), label=label)
+                cache = TrajectoryCache(
+                    params=dict(params), label=label, scenario_name=scenario.name
+                )
 
                 t0 = time.perf_counter()
                 for step in range(total_steps):

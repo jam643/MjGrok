@@ -70,18 +70,24 @@ class EmbeddedRenderer:
     # ── Public API ────────────────────────────────────────────────────────────
 
     def register_texture(self) -> None:
+        """Register this renderer's DPG texture. Must be called before dpg.setup_dearpygui()."""
+        self.register_texture_tag(self._texture_tag)
+
+    @classmethod
+    def register_texture_tag(cls, texture_tag: str) -> None:
         """Register a dynamic DPG texture. Must be called before dpg.setup_dearpygui().
 
+        Separate from any instance so the texture can exist while no renderer is running.
         Uses add_dynamic_texture which is designed for frequent per-frame updates.
         Always RGBA float32 in [0, 1].
         """
-        default = [0.0] * (self.RENDER_H * self.RENDER_W * 4)
+        default = [0.0] * (cls.RENDER_H * cls.RENDER_W * 4)
         with dpg.texture_registry():
             dpg.add_dynamic_texture(
-                width=self.RENDER_W,
-                height=self.RENDER_H,
+                width=cls.RENDER_W,
+                height=cls.RENDER_H,
                 default_value=default,
-                tag=self._texture_tag,
+                tag=texture_tag,
             )
 
     def set_on_frame(self, callback: Callable[[int], None]) -> None:

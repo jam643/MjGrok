@@ -16,6 +16,7 @@ class TrajectoryCache:
     series: dict[str, list[float]] = field(default_factory=dict)
 
     rollout_ms: float = 0.0  # wall-clock time for the mj_step loop (milliseconds)
+    scenario_name: str = ""  # Scenario.name that produced this run; "" if unknown
 
     # Finalized arrays (set after finalize())
     _times_arr: np.ndarray | None = field(default=None, repr=False)

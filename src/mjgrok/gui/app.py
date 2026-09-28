@@ -12,7 +12,7 @@ from mjgrok.gui.param_panel import ParamPanel
 from mjgrok.gui.playback_panel import PlaybackPanel
 from mjgrok.gui.plot_panel import PlotPanel
 from mjgrok.gui.saveload_panel import SaveLoadPanel
-from mjgrok.scenarios import SCENARIOS
+from mjgrok.scenarios import SCENARIO_REGISTRY, SCENARIOS
 from mjgrok.scenarios.base import Scenario
 from mjgrok.simulation.runner import SimulationRunner
 from mjgrok.simulation.trajectory import TrajectoryCache
@@ -23,7 +23,8 @@ _FONTS_DIR = Path(__file__).parent.parent / "assets" / "fonts"
 
 
 class MjGrokApp:
-    def __init__(self) -> None:
+    def __init__(self, preview_enabled: bool = True) -> None:
+        self._preview_enabled = preview_enabled
         self._scenario: Scenario = SCENARIOS[0]
         self._caches: dict[str, TrajectoryCache] = {}
         self._analytical_labels: set[str] = set()
@@ -78,8 +79,10 @@ class MjGrokApp:
             self._font_header = dpg.add_font(str(header_src), 24)
 
     def _build_ui(self) -> None:
-        self._embedded = EmbeddedRenderer("embed_tex")
-        self._embedded.register_texture()
+        # The texture must exist before setup_dearpygui() even if the preview starts disabled.
+        EmbeddedRenderer.register_texture_tag("embed_tex")
+        if self._preview_enabled:
+            self._embedded = EmbeddedRenderer("embed_tex")
 
         with dpg.window(tag="main_window", label="MjGrok", no_title_bar=True):
             dpg.set_primary_window("main_window", True)
@@ -180,10 +183,24 @@ class MjGrokApp:
 
                 with dpg.child_window(tag="preview_panel", border=False):
                     dpg.add_text("Simulation Preview")
+                    dpg.add_checkbox(
+                        tag="preview_enabled",
+                        label="Enable embedded preview",
+                        default_value=self._preview_enabled,
+                        callback=self._on_preview_toggled,
+                    )
+                    with dpg.tooltip("preview_enabled"):
+                        dpg.add_text(
+                            "Offscreen-renders the selected trajectory into this panel. Disable "
+                            "to free its render thread and GL context, e.g. when using the "
+                            "separate MuJoCo viewer. Launch with --no-preview to start disabled."
+                        )
                     dpg.add_image(
                         "embed_tex",
+                        tag="embed_image",
                         width=EmbeddedRenderer.RENDER_W,
                         height=EmbeddedRenderer.RENDER_H,
+                        show=self._preview_enabled,
                     )
 
         self._param_panel = ParamPanel("param_container", on_change=self._on_param_changed)
@@ -369,8 +386,20 @@ class MjGrokApp:
             runs.append((", ".join(label_parts), params))
         return runs
 
+    def _scenario_of(self, cache: TrajectoryCache) -> Scenario:
+        """Scenario that produced `cache`.
+
+        Read from the cache rather than `self._scenario`, which the main thread can swap while a
+        simulation-thread callback is mid-flight.
+        """
+        return SCENARIO_REGISTRY.get(cache.scenario_name, self._scenario)
+
     def _on_sim_done(self, cache: TrajectoryCache) -> None:
         """Called from simulation thread — only dpg.set_value is safe here."""
+        # A run can finish just as the user switches scenario (on the main thread); its params
+        # belong to the old scenario and would break the new scenario's plots and preview.
+        if self._scenario_of(cache) is not self._scenario:
+            return
         self._caches[cache.label] = cache
         self._plot_panel.update(cache)
 
@@ -384,7 +413,7 @@ class MjGrokApp:
         if not selected or selected == cache.label:
             n = cache.frame_count()
             # Hot-reload InProcessViewer (updates n_frames/dt internally under lock)
-            reloaded = self._viewer.reload_trajectory(self._scenario, cache.params, cache)
+            reloaded = self._viewer.reload_trajectory(self._scenario_of(cache), cache.params, cache)
             if reloaded:
                 self._playback_panel.update_frame_count(n)
             else:
@@ -392,7 +421,7 @@ class MjGrokApp:
                 self._viewer.configure(n, dt)
                 self._playback_panel.update_frame_count(n)
             if self._embedded:
-                self._embedded.load_trajectory(self._scenario, cache.params, cache)
+                self._embedded.load_trajectory(self._scenario_of(cache), cache.params, cache)
 
         # Count only simulation completions (analytical caches are pre-populated)
         n_sim_done = sum(1 for lbl in self._caches if lbl not in self._analytical_labels)
@@ -428,12 +457,12 @@ class MjGrokApp:
         if cache and self._playback_panel:
             n = cache.frame_count()
             dt = cache.times[1] - cache.times[0] if len(cache.times) >= 2 else 0.002
-            reloaded = self._viewer.reload_trajectory(self._scenario, cache.params, cache)
+            reloaded = self._viewer.reload_trajectory(self._scenario_of(cache), cache.params, cache)
             if not reloaded:
                 self._viewer.configure(n, dt)
             self._playback_panel.set_frame_count(n)
             if self._embedded:
-                self._embedded.load_trajectory(self._scenario, cache.params, cache)
+                self._embedded.load_trajectory(self._scenario_of(cache), cache.params, cache)
 
     def _on_seek(self, frame: int) -> None:
         self._viewer.seek(frame)
@@ -469,6 +498,25 @@ class MjGrokApp:
         if self._playback_panel:
             self._playback_panel.set_current_frame(frame)
 
+    def _on_preview_toggled(self, sender=None, app_data=None, user_data=None) -> None:
+        enabled = bool(app_data)
+        dpg.configure_item("embed_image", show=enabled)
+        if not enabled:
+            if self._embedded:
+                self._embedded.close()
+                self._embedded = None
+            return
+        if self._embedded:
+            return
+        self._embedded = EmbeddedRenderer("embed_tex")
+        # Pick up the trajectory the rest of the playback UI is showing.
+        label = self._playback_panel.get_selected_trajectory() if self._playback_panel else ""
+        cache = self._caches.get(label) or next(
+            (c for lbl, c in self._caches.items() if lbl not in self._analytical_labels), None
+        )
+        if cache is not None:
+            self._embedded.load_trajectory(self._scenario_of(cache), cache.params, cache)
+
     def _on_open_viewer(self) -> None:
         label = self._playback_panel.get_selected_trajectory()
         cache = self._caches.get(label)
@@ -491,7 +539,7 @@ class MjGrokApp:
         self._viewer.configure(cache.frame_count(), dt)
 
         try:
-            self._viewer.load(self._scenario, cache.params, cache)
+            self._viewer.load(self._scenario_of(cache), cache.params, cache)
             mode = "in-process" if use_inprocess else "subprocess"
             dpg.set_value("status_text", f"Viewer opened ({mode})")
         except Exception as e:
